@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/pmalacho-mit/filetree-suede
+	branch = release
+	commit = fa0d9ca53e53c22a59fb9ba103fcaa7fa1cd7b19
+	parent = 06faffb80bcca34989892355e6a48bb395a87cc5
+	method = merge
+	cmdver = 0.4.9

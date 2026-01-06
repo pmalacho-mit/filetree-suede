@@ -21,3 +21,32 @@ bash <(curl https://raw.githubusercontent.com/pmalacho-mit/suede/refs/heads/main
 
 </details>
 
+```ts
+export const join = (...parts: string[]) =>
+  parts
+    .map((part, index, { length }) =>
+      index === 0
+        ? part.replace(/\/+$/, "")
+        : index === length - 1
+        ? part.replace(/^\/+/, "")
+        : part.replace(/^\/+|\/+$/g, "")
+    )
+    .filter(Boolean)
+    .join("/");
+```
+
+FsType = "file" | "folder" | "root"
+
+File
+- type
+- icon: renderable snippet
+- name = $state("")
+- parent: WithNodes
+- path = $derived(join(parent.path, this.name))
+- constructor(parent) {
+  this.parent = $state(parent);
+}
+
+
+yjsTrack(model, yDoc, id, { name: "" })
+

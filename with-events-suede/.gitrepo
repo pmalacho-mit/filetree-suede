@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/pmalacho-mit/with-events-suede
+	branch = release
+	commit = d6065d2c752471e28dfa40ca1232f80fe3d0ee99
+	parent = f55ae84f68872a39293bc6b724c63473373401e9
+	method = merge
+	cmdver = 0.4.9

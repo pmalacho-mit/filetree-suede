@@ -4,9 +4,9 @@
 ; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
 ;
 [subrepo]
-	remote = https://github.com/pmalacho-mit/filetree-suede
+	remote = https://github.com/pmalacho-mit/with-events-suede
 	branch = release
-	commit = 04ac1e46f9e3696a10d757db9649638521b3b8f0
-	parent = 44849cf91ba79c0656e5b8e8ff5907032be61348
+	commit = e19f56adb609a2494291f03064bd2d1575f99828
+	parent = 3fd80a29e6c42f9b1fe250f04885fe0eec273490
 	method = merge
 	cmdver = 0.4.9

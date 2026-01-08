@@ -1,35 +1,28 @@
-<script lang="ts">
-  import {
-    tryGetLanguageByFile,
-    type SupportedLanguage,
-  } from "$lib/code-editor/languages.js";
-  import { close, register, type Items } from "$lib/context-menu/index.js";
-  import { type OnClick } from "$lib/utils/index.js";
-  import type EditableName from "./EditableName.svelte";
-  import type { TTreeItem } from "./Tree.svelte";
+<script lang="ts" module>
+  import { cssvar, type Vars } from "../Root.svelte";
 
-  type TryGetOnClick = (language?: SupportedLanguage) => OnClick;
+  type Supported = "--icon-size";
+
+  const _var = cssvar<Supported>();
+</script>
+
+<script lang="ts">
+  import { close, register } from "./";
+  import type EditableName from "../name/Input.svelte";
+  import type { MouseEventHandler } from "svelte/elements";
+  import type { File, Folder } from "..";
 
   type Props = {
+    model: File.Model | Folder.Model;
     nameUI?: EditableName;
     target?: HTMLElement;
     atCursor?: boolean;
     beforeAction?: () => void;
-  } & Partial<Pick<TTreeItem, "name" | "remove">> &
-    Partial<Record<"open" | "copy" | "addFile" | "addFolder", OnClick>>;
+  } & Vars<Supported>;
 
-  let {
-    nameUI,
-    open,
-    copy,
-    addFile,
-    addFolder,
-    remove,
-    name,
-    target,
-    atCursor,
-    beforeAction,
-  }: Props = $props();
+  let { model, nameUI, target, atCursor, beforeAction }: Props = $props();
+
+  type OnClick = MouseEventHandler<HTMLButtonElement>;
 
   const onMenuClick =
     (fn: OnClick): OnClick =>
@@ -41,43 +34,31 @@
       close();
     };
 
-  const language = $derived(tryGetLanguageByFile(name));
-
-  const items: Items = $derived(
-    (
-      [
-        [open, opener],
-        [copy, duplicate],
-        [addFile, file],
-        [addFolder, folder],
-        [
-          name
-            ? () => nameUI?.edit(true, name.split(".")[0].length)
-            : undefined,
-          renamer,
-        ],
-        [remove, deleter],
-      ] as const
-    )
-      .filter(([fn]) => fn)
-      .map(([fn, content]) => ({
-        content,
-        onclick: onMenuClick(fn as OnClick),
+  const getProps = () => {
+    const casted = model as Folder.Model;
+    const items = casted.getContextMenuItems?.(casted);
+    if (!items) return undefined;
+    return {
+      style: `--icon-size: ${_var("icon-size")};`,
+      items: items.map((item) => ({
+        ...item,
+        onclick: onMenuClick(item.onclick),
       })),
-  );
+    };
+  };
 
   $effect(() => {
     if (!target) return;
     register(
       target,
       {
-        props: () => ({ items }),
+        props: getProps,
         notAtCursor: () => !atCursor,
       },
       {
         onMount: () => nameUI?.highlight(true),
         onClose: () => nameUI?.highlight(false),
-      },
+      }
     );
   });
 
@@ -91,7 +72,8 @@
     viewBox="0 0 24 24"
     stroke-width={strokeWidth}
     stroke="currentColor"
-    class="size-5"
+    style:width={_var("icon-size")}
+    style:height={_var("icon-size")}
   >
     <path
       stroke-linecap="round"

@@ -1,52 +1,70 @@
 import { type IWithEvents, WithEvents } from "../with-events-suede";
 import { mixin } from "../mixin-suede";
-import { type Find, byName, byPath } from "./find";
+import { renderable } from "../snippet-renderer-suede";
+import { type Find, byName, byPath } from "./utils/find";
+import type { Snippet } from "svelte";
+import { fileIcon, symlinkIcon } from "./File.svelte";
+import { folderOpen, folderClosed } from "./Folder.svelte";
+import type { Items } from "./context";
 
-type Type = "file" | "folder" | "root";
+export type FileType = "file" | "symlink";
+export type Type = FileType | "folder" | "root";
 
-const attachType = <T extends Type>(
-  type: T,
-  target: any
-): target is { type: T } => Boolean((target.type = type as T));
+export type ItemType = Exclude<Type, "root">;
+type ParentType = Exclude<Type, FileType>;
 
-type ItemType = Exclude<Type, "root">;
-type ParentType = Exclude<Type, "file">;
-
-namespace Events {
+export namespace Events {
   export type Item = {
-    clicked: [];
+    clicked: [Entry];
+    "request rename": [config: { cursor?: number; force?: string } | undefined];
+    "request focus toggle": [];
+    renamed: [Entry];
+    reparented: [Entry];
   };
 
   export type Parent = {
-    childClicked: [Entry];
-    expand: [depth: "recursive" | "local"];
+    "child clicked": [entry: Entry, index: number];
+    "child renamed": [entry: Entry, index: number];
+    "request open": [depth: "recursive" | "local"];
+    "request close": [depth: "recursive" | "local"];
+    "request expansion toggle": [depth: "recursive" | "local"];
   };
+
+  export type WithItemEvents = IWithEvents<Item>;
 }
 
 export type Entry<T extends Type = ItemType> = {
   type: T;
 } & (T extends "root"
-  ? Parent & {
-      /** Root-specific properties */
-      name?: undefined;
-      path?: undefined;
-    }
+  ? Parent &
+      IWithEvents<Events.Parent> & {
+        /** Root-specific properties */
+        name?: undefined;
+        path?: undefined;
+      }
   : {
       name: string;
       path: string;
       parent: Entry<ParentType>;
       readonly: boolean;
       remove(): void;
-      getContextMenuItems?: (self: Entry<T>) => unknown[];
-      is<T extends Type>(query: T): this is Entry<T>;
+      getContextMenuItems?: (self: Entry<T>) => Items;
+      is<Target extends Entry<T>, T extends Type = Target["type"]>(
+        query: T
+      ): this is Target;
     } & (T extends "folder"
-      ? Parent & {
-          /** Folder-specific properties */
-        }
-      : {
-          /** File-specific properties */
-        }) &
-      IWithEvents<Events.Item>);
+      ? Parent &
+          IWithEvents<Events.Parent & Events.Item> & {
+            /** Folder-specific properties */
+            icon: {
+              closed: renderable.Returns<"single", "optional">;
+              open: renderable.Returns<"single", "optional">;
+            };
+          }
+      : IWithEvents<Events.Item> & {
+          /** File-like-specific properties */
+          icon: renderable.Returns<"single", "optional">;
+        }));
 
 const is = <T extends Type>(
   entry: Pick<Entry, "type">,
@@ -59,7 +77,13 @@ type Parent = {
   getUniqueName: (candidate: string) => string;
   walk: (fn: (node: Parent["children"][number]) => void) => void;
   find: <T extends Find.Query>(query: T) => Find.Result<T>;
-} & IWithEvents<Events.Parent>;
+  sort(): void;
+  propagate(parent: IWithEvents<Events.Parent>): () => void;
+  add<const T extends Entry<ItemType> | Entry<ItemType>[]>(
+    item: T,
+    index?: number
+  ): T;
+};
 
 type WithoutEvents<T> = Omit<T, keyof IWithEvents<any>>;
 
@@ -67,10 +91,16 @@ type ParentConstructorArgs = Partial<
   Pick<ParentBase, "validNameContent" | "getNameVariant">
 >;
 
-const defaults: Required<
-  Pick<ParentConstructorArgs, "getNameVariant"> &
-    Pick<ItemConstructorArgs<ItemType>, "defaultNameForType">
-> = {
+namespace Defaults {
+  type Parent = Pick<ParentConstructorArgs, "getNameVariant">;
+  type Item = Pick<
+    ItemConstructor.Args<ItemType>,
+    "defaultNameForType" | "defaultFileIcon" | "defaultFolderIcon"
+  >;
+  export type All = Required<Parent & Item>;
+}
+
+const defaults: Defaults.All = {
   getNameVariant: (current: string, attempt: number) => {
     const dot = current.lastIndexOf(".");
     const id = `(${attempt + 1})`;
@@ -79,9 +109,32 @@ const defaults: Required<
       : current.slice(0, dot) + id + current.slice(dot);
   },
   defaultNameForType: (type: ItemType) => type,
+  defaultFileIcon: (type: "file" | "symlink") => {
+    switch (type) {
+      case "file":
+        return fileIcon;
+      case "symlink":
+        return symlinkIcon;
+    }
+  },
+  defaultFolderIcon: (state: "open" | "closed") => {
+    switch (state) {
+      case "open":
+        return folderOpen;
+      case "closed":
+        return folderClosed;
+    }
+  },
+};
+
+const attach = {
+  type: <T extends Type>(type: T, target: any): target is { type: T } =>
+    Boolean((target.type = type as T)),
 };
 
 class ParentBase implements WithoutEvents<Parent> {
+  children = $state(new Array<Entry>());
+
   readonly validNameContent?: (candidate: string) => true | string;
   readonly getNameVariant?: (current: string, attempt: number) => string;
 
@@ -92,8 +145,6 @@ class ParentBase implements WithoutEvents<Parent> {
     this.validNameContent = validNameContent;
     this.getNameVariant = getNameVariant;
   }
-
-  children = $state(new Array<Entry>());
 
   isNameUnique(name: string) {
     return !this.children.some((child) => child.name === name);
@@ -126,21 +177,74 @@ class ParentBase implements WithoutEvents<Parent> {
         : byName(query.name, this.children)
     ) as Find.Result<T>;
   }
+
+  sort() {
+    this.children.sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  propagate(parent: IWithEvents<Events.Parent>) {
+    return WithEvents.Collect(
+      this.children as any as WithEvents<Events.Item & Events.Parent>[]
+    ).subscribe({
+      clicked: (child, _, index) => parent.fire("child clicked", child, index),
+      renamed: (child, _, index) => parent.fire("child renamed", child, index),
+      "child clicked": (child, index) =>
+        parent.fire("child clicked", child, index),
+      "child renamed": (child, index) =>
+        parent.fire("child renamed", child, index),
+    });
+  }
+
+  add<const T extends Entry<ItemType> | Entry<ItemType>[]>(
+    item: T,
+    index?: number
+  ): T {
+    if (index === undefined)
+      Array.isArray(item)
+        ? this.children.push(...item)
+        : this.children.push(item);
+    else
+      Array.isArray(item)
+        ? this.children.splice(index, 0, ...item)
+        : this.children.splice(index, 0, item);
+    return item;
+  }
 }
 
-type ItemConstructorArgs<T extends ItemType> = Pick<
-  Entry<T>,
-  "type" | "parent"
-> &
-  Partial<
-    Pick<Entry<T>, "name" | "parent" | "readonly" | "getContextMenuItems"> & {
-      defaultNameForType: (type: ItemType) => string;
-    }
+namespace ItemConstructor {
+  type RequiredFromEntry<T extends ItemType> = Required<
+    Pick<Entry<T>, "type" | "parent">
   >;
+
+  type PartialFromEntry<T extends ItemType> = Partial<
+    Pick<Entry<T>, "name" | "parent" | "readonly" | "getContextMenuItems">
+  >;
+
+  type Factories = Partial<{
+    defaultNameForType: (type: ItemType) => string;
+    defaultFileIcon(type: FileType): string | Snippet<[]>;
+    defaultFolderIcon(state: "open" | "closed"): string | Snippet<[]>;
+  }>;
+
+  type Renderables<T extends ItemType> = Partial<
+    Exclude<
+      T extends "folder"
+        ? renderable.Initial<Entry<"folder">["icon"]>
+        : renderable.Initial<Pick<Entry<Exclude<ItemType, "folder">>, "icon">>,
+      undefined
+    >
+  >;
+
+  export type Args<T extends ItemType> = RequiredFromEntry<T> &
+    PartialFromEntry<T> &
+    Factories &
+    Renderables<T>;
+}
 
 class ItemBase<T extends ItemType> implements WithoutEvents<Entry> {
   name: string;
   parent: Entry<ParentType>;
+  readonly icon: Entry<T>["icon"];
   readonly type: T;
   readonly path: string;
   readonly readonly: boolean;
@@ -151,9 +255,12 @@ class ItemBase<T extends ItemType> implements WithoutEvents<Entry> {
     name,
     parent,
     readonly,
+    renderables,
+    defaultFileIcon,
+    defaultFolderIcon,
     defaultNameForType,
     getContextMenuItems,
-  }: ItemConstructorArgs<T>) {
+  }: ItemConstructor.Args<T>) {
     this.type = type;
     this.readonly = readonly ?? false;
     this.getContextMenuItems = getContextMenuItems;
@@ -165,9 +272,36 @@ class ItemBase<T extends ItemType> implements WithoutEvents<Entry> {
         )
     );
     this.path = $derived(`${this.parent.path ?? ""}/${this.name}`);
+
+    if (this.is("folder")) {
+      this.icon = { open: renderable("single"), closed: renderable("single") };
+      if (renderables)
+        renderable.init(this.icon, { renderables } as renderable.Initial<
+          Entry<"folder">["icon"]
+        >);
+      else {
+        const getIcon = defaultFolderIcon ?? defaults.defaultFolderIcon;
+        this.icon.open.set((r) => r(getIcon("open") as Snippet<[]>));
+        this.icon.closed.set((r) => r(getIcon("closed") as Snippet<[]>));
+      }
+    } else {
+      this.icon = renderable("single");
+      if (renderables) {
+        type FileRenderables = Pick<Entry<FileType>, "icon">;
+        renderable.init(
+          this as FileRenderables,
+          { renderables } as renderable.Initial<FileRenderables>
+        );
+      } else {
+        const getIcon = defaultFileIcon ?? defaults.defaultFileIcon;
+        this.icon.set((r) => r(getIcon(type as FileType) as Snippet<[]>));
+      }
+    }
   }
 
-  is<Query extends Type>(query: Query): this is Entry<Query> {
+  is<Target extends Entry<T>, T extends Type = Target["type"]>(
+    query: T
+  ): this is Target {
     return is(this, query);
   }
 
@@ -176,6 +310,16 @@ class ItemBase<T extends ItemType> implements WithoutEvents<Entry> {
     const self = this as any as Entry;
     children.splice(children.indexOf(self), 1);
   }
+
+  interface() {
+    return this as any as Entry<T>;
+  }
+}
+
+namespace Serialized {
+  type File = string;
+  type Folder = [name: string, children: Entry[]];
+  export type Entry = File | Folder;
 }
 
 export class Root
@@ -187,14 +331,42 @@ export class Root
   constructor(args?: ParentConstructorArgs) {
     super([args]);
   }
+
+  static From(...entries: Serialized.Entry[]): Root {
+    const root = new Root();
+
+    const build = (node: Serialized.Entry, parent: Entry<ParentType>) => {
+      if (typeof node === "string") {
+        const file = new File({ name: node, parent });
+        parent.add(file);
+      } else {
+        const [name, children] = node;
+        const folder = new Folder({ name, parent });
+        parent.add(folder);
+        for (const child of children) build(child, folder);
+      }
+    };
+
+    for (const entry of entries) build(entry, root);
+    return root;
+  }
 }
 
 export class File
   extends mixin([ItemBase<"file">, WithEvents<Events.Item>])
   implements Entry<"file">
 {
-  constructor(args: Omit<ItemConstructorArgs<"file">, "type">) {
-    if (attachType("file", args)) super([args]);
+  constructor(args: Omit<ItemConstructor.Args<"file">, "type">) {
+    if (attach.type("file", args)) super([args]);
+  }
+}
+
+export class Symlink
+  extends mixin([ItemBase<"symlink">, WithEvents<Events.Item>])
+  implements Entry<"symlink">
+{
+  constructor(args: Omit<ItemConstructor.Args<"symlink">, "type">) {
+    if (attach.type("symlink", args)) super([args]);
   }
 }
 
@@ -207,8 +379,8 @@ export class Folder
   implements Entry<"folder">
 {
   constructor(
-    args: Omit<ItemConstructorArgs<"folder">, "type"> & ParentConstructorArgs
+    args: Omit<ItemConstructor.Args<"folder">, "type"> & ParentConstructorArgs
   ) {
-    if (attachType("folder", args)) super([args], [args]);
+    if (attach.type("folder", args)) super([args], [args]);
   }
 }

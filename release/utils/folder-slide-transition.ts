@@ -1,7 +1,19 @@
+import { defer, type Deferred } from ".";
+
 const easeInOut = {
   id: "ease-in-out",
-  t: (t: number) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2
-}
+  t: (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2),
+};
+
+const easeOut = {
+  id: "ease-out",
+  t: (t: number) => 1 - Math.pow(1 - t, 3),
+};
+
+const linear = {
+  id: "linear",
+  t: (t: number) => t,
+};
 
 export default class FolderSlideTransition {
   private version = Number.MIN_SAFE_INTEGER;
@@ -33,10 +45,18 @@ export default class FolderSlideTransition {
     return opening ? height * (1 - t) : height * t;
   }
 
-  fire(opening: boolean, recursive = false as never) {
+  fire<Condition extends boolean>(
+    opening: Condition,
+    deferred?: Deferred<void>,
+    recursive = false as never
+  ): Deferred {
+    deferred ??= defer<void>();
     const { style, children } = this.element;
-    if (!children[0] && !recursive)
-      return requestAnimationFrame(() => this.fire(opening, true as never));
+    if (!children[0] && !recursive) {
+      requestAnimationFrame(() => this.fire(opening, deferred, true as never));
+      return deferred;
+    }
+
     const version = ++this.version;
     style.maxHeight = `${this.initialHeight(opening)}px`;
     style.transition = "none";
@@ -50,12 +70,14 @@ export default class FolderSlideTransition {
       const unset = () => {
         if (this.version === version) style.maxHeight = "none";
         this.element.removeEventListener("transitionend", unset);
+        deferred.resolve();
       };
       this.element.addEventListener("transitionend", unset);
-    }
+    } else deferred.resolve();
+
+    return deferred;
   }
 
-  public static DurationMs = 400;
-  private static Transition =
-    `max-height ${FolderSlideTransition.DurationMs}ms ${easeInOut.id}`;
+  public static DurationMs = 1000;
+  private static Transition = `max-height ${FolderSlideTransition.DurationMs}ms ${easeInOut.id}`;
 }

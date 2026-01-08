@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+  remote = https://github.com/pmalacho-mit/dockview-svelte-suede.git
+  branch = release
+	commit = 06e89bf88a0ca19d0deff10b8fd39930f63609e6
+	parent = d334872aebf2a4125e2974fb1446f2c8034eaf95
+	method = merge
+	cmdver = 0.4.9

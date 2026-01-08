@@ -65,8 +65,6 @@
     K extends "single" | "multi",
     T extends K extends "multi"
       ? Maybe<Record<string, any>[]>
-      : Maybe<Record<string, any>> = K extends "multi"
-      ? Maybe<Record<string, any>[]>
       : Maybe<Record<string, any>>,
   > = {
     /**
@@ -174,8 +172,8 @@
           }
         : {}));
 
-  type Constraint = Record<string, any>;
-  type Default = RenderableSnippet<any>;
+  export type Constraint = Record<string, any>;
+  export type DefaultConstraint = RenderableSnippet<any>;
 
   const valueFromMulti = <T extends Maybe<SingleOrArray<any>>>(value: T) =>
     Array.isArray(value) ? value : value !== undefined ? [value] : undefined;
@@ -185,7 +183,7 @@
    * @overload
    * @param kind specify that this is a `"single"` renderable
    */
-  function _renderable<T extends Constraint = Default>(
+  function _renderable<T extends Constraint = DefaultConstraint>(
     kind: "single"
   ): Expand<Renderable<"single", Maybe<T>>>;
   /**
@@ -194,7 +192,7 @@
    * @param kind specify that this is a `"single"` renderable
    * @param initial A callback that returns the initial value of the renderable
    */
-  function _renderable<T extends Constraint = Default>(
+  function _renderable<T extends Constraint = DefaultConstraint>(
     kind: "single",
     initial: (render: typeof renderableSnippet) => T
   ): Expand<Renderable<"single", T>>;
@@ -203,7 +201,7 @@
    * @overload
    * @param kind specify that this is a `"multi"` renderable
    */
-  function _renderable<T extends Constraint = Default>(
+  function _renderable<T extends Constraint = DefaultConstraint>(
     kind: "multi"
   ): Expand<Renderable<"multi", Maybe<T[]>>>;
   /**
@@ -213,7 +211,7 @@
    * @param kind specify that this is a `"multi"` renderable
    * @param initial A callback that returns the initial value of the renderable
    */
-  function _renderable<T extends Constraint = Default>(
+  function _renderable<T extends Constraint = DefaultConstraint>(
     kind: "multi",
     initial: (render: typeof renderableSnippet) => SingleOrArray<T>
   ): Expand<Renderable<"multi", T[]>>;

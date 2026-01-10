@@ -1,4 +1,5 @@
 <script lang="ts" module>
+  import type { Expand } from "./utils";
   const vars = {
     /**
      * Size of icons used throughout the file tree.
@@ -15,7 +16,9 @@
   type SupportedVars = typeof vars;
   type Var = keyof SupportedVars;
 
-  export type Vars<K extends Var = Var> = Partial<Pick<SupportedVars, K>>;
+  export type Vars<K extends Var = Var> = Expand<
+    Partial<Pick<SupportedVars, K>>
+  >;
 
   type WithoutLeadingDash<T extends string> = T extends `--${infer R}` ? R : T;
   const withLeadingDash = <T extends string>(varName: WithoutLeadingDash<T>) =>

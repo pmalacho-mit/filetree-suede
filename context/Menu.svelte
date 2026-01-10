@@ -8,19 +8,18 @@
 
 <script lang="ts">
   import { close, register } from "./";
-  import type EditableName from "../name/Input.svelte";
   import type { MouseEventHandler } from "svelte/elements";
   import type { File, Folder } from "..";
 
   type Props = {
     model: File.Model | Folder.Model;
-    nameUI?: EditableName;
+    highlight: (condition: boolean) => void;
     target?: HTMLElement;
     atCursor?: boolean;
     beforeAction?: () => void;
   } & Vars<Supported>;
 
-  let { model, nameUI, target, atCursor, beforeAction }: Props = $props();
+  let { model, target, atCursor, beforeAction, highlight }: Props = $props();
 
   type OnClick = MouseEventHandler<HTMLButtonElement>;
 
@@ -56,8 +55,8 @@
         notAtCursor: () => !atCursor,
       },
       {
-        onMount: () => nameUI?.highlight(true),
-        onClose: () => nameUI?.highlight(false),
+        onMount: () => highlight(true),
+        onClose: () => highlight(false),
       }
     );
   });

@@ -19,70 +19,37 @@
 
 <script lang="ts">
   import type { Entry, FileType } from "./models.svelte";
+  import Row from "./utils/Row.svelte";
   import { EditableName, rename } from "./name";
-  import { ContextMenu } from "./context";
-  import { tick } from "svelte";
   import { renderer } from "../snippet-renderer-suede";
 
   let { model }: { model: File.Model } & Vars<Supported> = $props();
 
-  let nameUI = $state<EditableName>();
-  let topLevel = $state<HTMLElement>();
+  let nameView = $state<EditableName>();
   let focused = $state(false);
 
   $effect(() =>
     (model as Entry<FileType>).subscribe({
-      "request focus toggle": () => (focused = !focused),
       "request rename": (config) => {
         if (model.readonly) return;
         const cursor = config?.cursor ?? indexBeforeExtension(model);
-        nameUI
-          ? rename(nameUI!, cursor, config?.force)
-          : tick().then(() => rename(nameUI!, cursor, config?.force));
+        rename(nameView!, cursor, config?.force);
       },
     })
   );
 </script>
 
-<ContextMenu
-  {model}
-  {nameUI}
-  target={topLevel}
-  beforeAction={() => nameUI?.edit(false, model.name)}
-/>
-
-<button
-  bind:this={topLevel}
-  onclick={() => model.fire("clicked", model)}
-  style:color="inherit"
-  style:background-color={focused
-    ? _var("focus-background-color")
-    : "transparent"}
-  style:position="relative"
-  style:display="flex"
-  style:width="100%"
-  style:border-radius="0.125rem"
-  style:border-color="transparent"
->
-  <span
-    style:width="100%"
-    style:display="flex"
-    style:flex-direction="row"
-    style:align-items="center"
-    style:gap="0.125rem"
-  >
-    <div style:flex-shrink="0">
-      {#if model.icon.current !== undefined}
-        {@render renderer(model.icon)}
-      {:else if model.type === "symlink"}
-        {@render symlinkIcon()}
-      {:else}
-        {@render fileIcon()}
-      {/if}
-    </div>
-    <EditableName {model} {focused} bind:this={nameUI} />
-  </span>
-</button>
+<Row {model} bind:nameView bind:focused>
+  {#snippet icon()}
+    {#if model.icon.current !== undefined}
+      {@render renderer(model.icon)}
+    {:else if model.type === "symlink"}
+      {@render symlinkIcon()}
+    {:else}
+      {@render fileIcon()}
+    {/if}
+  {/snippet}
+</Row>
 
 {#snippet symlinkIcon()}
   <svg

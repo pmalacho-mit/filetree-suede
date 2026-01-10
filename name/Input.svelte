@@ -11,14 +11,14 @@
     self.edit(true, detail, override);
   };
 
-  export type Supported =
+  export type SupportedVars =
     | "--text-color"
     | "--font-size"
     | "--focus-background-color"
     | "--background-color"
     | "--editing-outline-color";
 
-  const _var = cssvar<Supported>();
+  const _var = cssvar<SupportedVars>();
 </script>
 
 <script lang="ts">
@@ -36,7 +36,7 @@
   }: {
     model: File.Model | Folder.Model;
     focused?: boolean;
-  } & Vars<Supported> = $props();
+  } & Vars<SupportedVars> = $props();
 
   const name = $derived(model.name);
 

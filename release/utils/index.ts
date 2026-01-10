@@ -124,3 +124,10 @@ export const unset = <T extends Record<string, any>>(value: {
 }) => {
   for (const key in value) value[key] = undefined as any;
 };
+
+export const easeInOut = {
+  id: "ease-in-out",
+  t: (t: number) => (t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2),
+};
+
+export const px = (value: number) => `${value}px` as const;

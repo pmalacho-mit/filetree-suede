@@ -10,6 +10,7 @@ type MountReturn<T extends Component<any, any, any>> = {
   component: Exports<T>;
   destroy: () => void;
   target: HTMLElement;
+  alive: boolean;
 };
 
 type IfProps<
@@ -30,13 +31,23 @@ export class TooltipSingleton<T extends Component<any, any, any>> {
   ): MountReturn<T>;
   mount(target: HTMLElement, props?: Props<T>) {
     let component = mount(this.component, { target, props });
+    let alive = true;
     this.current?.();
     const destroy = async () => {
+      if (!alive) return;
+      alive = false;
       if (this.current == destroy) this.current = undefined;
       await unmount(component, { outro: true });
       target.remove();
     };
     this.current = destroy;
-    return { component, destroy, target };
+    return {
+      component,
+      destroy,
+      target,
+      get alive() {
+        return alive;
+      },
+    };
   }
 }

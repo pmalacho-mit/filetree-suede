@@ -39,11 +39,14 @@ export const mouseEventToCaretIndex = <
   const element = useChild ? currentTarget.children[0] : currentTarget;
   const { width } = element.getBoundingClientRect();
 
-  if (length === 0) return 0;
+  if (length === 0) return { caretIndex: 0, approxCharacterWidth: 0 };
 
-  const approxCharWidth = width / length;
-  const caretIndex = Math.round(offsetX / approxCharWidth);
-  return caretIndex > length ? length : caretIndex;
+  const approxCharacterWidth = width / length;
+  const caretIndex = Math.round(offsetX / approxCharacterWidth);
+  return {
+    caretIndex: caretIndex > length ? length : caretIndex,
+    approxCharacterWidth: approxCharacterWidth,
+  };
 };
 
 export const isEllipsisActive = ({ scrollWidth, clientWidth }: HTMLElement) =>
@@ -77,15 +80,19 @@ export const createAtEvent = (
 
 export const fixToTopLeftCorner = (
   element: HTMLElement,
-  attributes?: Partial<CSSStyleDeclaration>
+  attributes?: Omit<
+    Partial<CSSStyleDeclaration>,
+    "top" | "left" | "width" | "height"
+  > &
+    Partial<Record<"top" | "left" | "width" | "height", number>>
 ) => {
   const { top, left, width, height } = element.getBoundingClientRect();
   const fixed = document.createElement("div");
   fixed.style.position = "fixed";
-  fixed.style.top = `${top}px`;
-  fixed.style.left = `${left}px`;
-  fixed.style.width = `${width}px`;
-  fixed.style.height = `${height}px`;
+  fixed.style.top = `${top + (attributes?.top ?? 0)}px`;
+  fixed.style.left = `${left + (attributes?.left ?? 0)}px`;
+  fixed.style.width = `${width + (attributes?.width ?? 0)}px`;
+  fixed.style.height = `${height + (attributes?.height ?? 0)}px`;
   if (attributes) Object.assign(fixed.style, attributes);
   return creationContainer.appendChild(fixed);
 };

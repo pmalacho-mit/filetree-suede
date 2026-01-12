@@ -1,56 +1,81 @@
-<script lang="ts">
-  import type { MouseEventHandler } from "svelte/elements";
-  import { fade } from "svelte/transition";
+<script lang="ts" module>
+  import { classified, type Classify, type WithClassify } from "../Root.svelte";
 
   type EventHandlers = Record<
-    "onmouseleave" | "onclick" | "ondblclick" | "oncontextmenu",
+    | "onmouseleave"
+    | "onmouseenter"
+    | "onclick"
+    | "ondblclick"
+    | "oncontextmenu",
     MouseEventHandler<HTMLElement>
   >;
 
-  type Style = Record<"background" | "font-size" | "color", string>;
+  /**
+   * Style props are only those that are required to ensure the overflow tooltip
+   * aligns visually with the name input.
+   *
+   * NOTE: This may need to be expanded in the future (e.g. for font-family, font-weight, etc.)
+   */
+  type Style = {
+    backgroundColor: string;
+    fontSize: string;
+    color: string;
+    paddingY: number;
+  };
+
+  export type Props = {
+    name: string;
+  } & Style &
+    EventHandlers &
+    WithClassify;
+
+  export const Classes = (classify?: Classify) =>
+    classified(classify, {
+      element: "name-overflow-tooltip",
+    });
+</script>
+
+<script lang="ts">
+  import type { MouseEventHandler } from "svelte/elements";
+  import { px } from "../utils";
 
   let {
     name,
+    onmouseenter,
     onmouseleave,
     onclick,
     ondblclick,
     oncontextmenu,
+    classify,
     ...style
-  }: { name: string } & Style & EventHandlers = $props();
+  }: Props = $props();
 
-  let background = $derived(style.background);
+  let _element = $state<HTMLElement>();
+  const classes = $derived(Classes(classify));
+  let background = $derived(style.backgroundColor);
 
-  export const setBackground = (bg: string) => {
-    background = bg;
-  };
+  export const element = () => _element;
+  export const setBackground = (bg: string) => (background = bg);
 </script>
 
 <button
+  bind:this={_element}
+  class={classes.element}
+  style:whitespace="nowrap"
+  style:border="none"
+  style:outline="none"
+  style:padding-left="0"
+  style:margin="0"
   style:background-color={background}
-  style:color={style["color"]}
-  style:font-size={style["font-size"]}
-  transition:fade={{ duration: 100 }}
+  style:color={style.color}
+  style:font-size={style.fontSize}
+  style:padding-top={px(style.paddingY)}
+  style:padding-bottom={px(style.paddingY)}
   {oncontextmenu}
+  {onmouseenter}
   {onmouseleave}
   {onclick}
   {ondblclick}
 >
   {name}
 </button>
-
-<style>
-  button {
-    font-size: var(--font-size);
-    border: none;
-    outline: none;
-    border-radius: 0.25rem;
-    padding: 0;
-    margin: 0;
-    /* padding-left: 1rem;
-    padding-right: 1rem;
-    padding-top: 0.5rem;
-    padding-bottom: 0.5rem; */
-    /* font-weight: 700; */
-    color: black;
-  }
-</style>

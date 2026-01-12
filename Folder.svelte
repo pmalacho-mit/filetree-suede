@@ -169,11 +169,7 @@
       {@render folderClosed()}
     {/if}
   {/snippet}
-  <div
-    bind:this={childContainer}
-    style:overflow="hidden"
-    style:will-change="max-height"
-  >
+  <div bind:this={childContainer} style:will-change="max-height">
     {#if expanded}
       <ul
         bind:clientHeight

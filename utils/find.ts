@@ -1,4 +1,4 @@
-import type { Entry } from "./models.svelte";
+import type { Entry } from "../models.svelte";
 
 export namespace Find {
   export type Query = { path: string } | { name: string };

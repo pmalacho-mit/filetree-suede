@@ -1,26 +1,20 @@
 <script lang="ts" module>
-  import { cssvar, type Vars } from "../Root.svelte";
-
-  type Supported = "--icon-size";
-
-  const _var = cssvar<Supported>();
 </script>
 
 <script lang="ts">
   import { close, register } from "./";
-  import type EditableName from "../name/Input.svelte";
   import type { MouseEventHandler } from "svelte/elements";
   import type { File, Folder } from "..";
 
   type Props = {
     model: File.Model | Folder.Model;
-    nameUI?: EditableName;
+    highlight: (condition: boolean) => void;
     target?: HTMLElement;
     atCursor?: boolean;
     beforeAction?: () => void;
-  } & Vars<Supported>;
+  };
 
-  let { model, nameUI, target, atCursor, beforeAction }: Props = $props();
+  let { model, target, atCursor, beforeAction, highlight }: Props = $props();
 
   type OnClick = MouseEventHandler<HTMLButtonElement>;
 
@@ -39,7 +33,7 @@
     const items = casted.getContextMenuItems?.(casted);
     if (!items) return undefined;
     return {
-      style: `--icon-size: ${_var("icon-size")};`,
+      style: `--icon-size: inherit;`,
       items: items.map((item) => ({
         ...item,
         onclick: onMenuClick(item.onclick),
@@ -56,8 +50,8 @@
         notAtCursor: () => !atCursor,
       },
       {
-        onMount: () => nameUI?.highlight(true),
-        onClose: () => nameUI?.highlight(false),
+        onMount: () => highlight(true),
+        onClose: () => highlight(false),
       }
     );
   });
@@ -72,8 +66,6 @@
     viewBox="0 0 24 24"
     stroke-width={strokeWidth}
     stroke="currentColor"
-    style:width={_var("icon-size")}
-    style:height={_var("icon-size")}
   >
     <path
       stroke-linecap="round"

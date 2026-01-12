@@ -1,99 +1,60 @@
 <script lang="ts" module>
   import type { File } from "./";
-  import { type Vars, cssvar } from "./Root.svelte";
   export { symlinkIcon, fileIcon };
 
   const indexBeforeExtension = ({ name }: Pick<File.Model, "name">) => {
     const lastDot = name.lastIndexOf(".");
     return lastDot === -1 ? name.length : lastDot;
   };
-
-  export type Supported =
-    | "--focus-background-color"
-    | "--icon-stroke-width"
-    | "--icon-size"
-    | "--focus-background-color";
-
-  const _var = cssvar<Supported>();
 </script>
 
 <script lang="ts">
   import type { Entry, FileType } from "./models.svelte";
+  import Row from "./utils/Row.svelte";
   import { EditableName, rename } from "./name";
-  import { ContextMenu } from "./context";
-  import { tick } from "svelte";
   import { renderer } from "../snippet-renderer-suede";
+  import type { WithClassify } from "./Root.svelte";
 
-  let { model }: { model: File.Model } & Vars<Supported> = $props();
+  let {
+    model,
+    depth = 0,
+    classify,
+  }: { model: File.Model; depth?: number } & WithClassify = $props();
 
-  let nameUI = $state<EditableName>();
-  let topLevel = $state<HTMLElement>();
+  let nameView = $state<EditableName>();
   let focused = $state(false);
 
   $effect(() =>
     (model as Entry<FileType>).subscribe({
-      "request focus toggle": () => (focused = !focused),
       "request rename": (config) => {
         if (model.readonly) return;
         const cursor = config?.cursor ?? indexBeforeExtension(model);
-        nameUI
-          ? rename(nameUI!, cursor, config?.force)
-          : tick().then(() => rename(nameUI!, cursor, config?.force));
+        rename(nameView!, cursor, config?.force);
       },
     })
   );
 </script>
 
-<ContextMenu
-  {model}
-  {nameUI}
-  target={topLevel}
-  beforeAction={() => nameUI?.edit(false, model.name)}
-/>
-
-<button
-  bind:this={topLevel}
-  onclick={() => model.fire("clicked", model)}
-  style:color="inherit"
-  style:background-color={focused
-    ? _var("focus-background-color")
-    : "transparent"}
-  style:position="relative"
-  style:display="flex"
-  style:width="100%"
-  style:border-radius="0.125rem"
-  style:border-color="transparent"
->
-  <span
-    style:width="100%"
-    style:display="flex"
-    style:flex-direction="row"
-    style:align-items="center"
-    style:gap="0.125rem"
-  >
-    <div style:flex-shrink="0">
-      {#if model.icon.current !== undefined}
-        {@render renderer(model.icon)}
-      {:else if model.type === "symlink"}
-        {@render symlinkIcon()}
-      {:else}
-        {@render fileIcon()}
-      {/if}
-    </div>
-    <EditableName {model} {focused} bind:this={nameUI} />
-  </span>
-</button>
+<Row {model} {depth} {classify} bind:nameView bind:focused>
+  {#snippet icon()}
+    {#if model.icon.current !== undefined}
+      {@render renderer(model.icon)}
+    {:else if model.type === "symlink"}
+      {@render symlinkIcon()}
+    {:else}
+      {@render fileIcon()}
+    {/if}
+  {/snippet}
+</Row>
 
 {#snippet symlinkIcon()}
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
-    fill="currentColor"
+    fill="var(--color, currentColor)"
+    stroke-width="var(--stroke-width, 1.4)"
     stroke-linecap="round"
     stroke-linejoin="round"
-    stroke-width={_var("icon-stroke-width")}
-    style:width={_var("icon-size")}
-    style:height={_var("icon-size")}
   >
     <g>
       <path
@@ -109,12 +70,10 @@
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
-    stroke="currentColor"
+    stroke="var(--color, currentColor)"
+    stroke-width="var(--stroke-width, 1.4)"
     stroke-linecap="round"
     stroke-linejoin="round"
-    stroke-width={_var("icon-stroke-width")}
-    style:width={_var("icon-size")}
-    style:height={_var("icon-size")}
   >
     <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
     <path d="M14 2v4a2 2 0 0 0 2 2h4" />
@@ -123,10 +82,3 @@
     <path d="M16 17H8" />
   </svg>
 {/snippet}
-
-<style>
-  svg {
-    will-change: transform, opacity;
-    backface-visibility: hidden;
-  }
-</style>

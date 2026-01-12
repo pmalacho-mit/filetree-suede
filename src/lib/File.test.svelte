@@ -45,24 +45,18 @@
   }}
 >
   {#snippet vest({ root }: { root: Root.Model })}
-    <div style="width: 100px; margin: 8px;">
-      <Root.DefaultStyle
-        model={root}
-        --background-color="white"
-        --text-color="black"
-        --font-size={"1rem"}
-      />
+    <div style="display: flex; flex-direction: row; align-items: flex-start;">
+      <div style="width: 100px; margin: 8px; border: 1px solid black;">
+        <Root.DefaultStyle
+          model={root}
+          --background-color="white"
+          --text-color="black"
+          --font-size={"1rem"}
+        />
+      </div>
+      <div
+        style="width: 100px; margin: 8px; height: 100px; background-color: blue;"
+      ></div>
     </div>
   {/snippet}
 </Sweater>
-
-<style>
-  div :global(.children:hover + .name) {
-    background-color: rgba(
-      0,
-      0,
-      0,
-      calc(calc(var(--depth) + 0.5) * 0.05)
-    ) !important;
-  }
-</style>

@@ -104,6 +104,7 @@
       style:position="relative"
       style:height="fit-content"
       style:width="100%"
+      style:overflow-x="visible"
       style:padding="0"
       style:margin="0"
       style:order="2"
@@ -170,6 +171,16 @@
 {/snippet}
 
 <style>
+  .row-name:hover {
+    min-width: 100% !important;
+    width: fit-content !important;
+  }
+
+  .row-name:hover + .row-children {
+    overflow-x: visible !important;
+    width: fit-content !important;
+  }
+
   button {
     background-color: inherit;
   }

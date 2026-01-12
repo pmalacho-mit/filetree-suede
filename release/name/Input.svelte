@@ -75,6 +75,7 @@
       onMouseEnter?: () => void,
       onMouseLeave?: () => void
     ) => {
+      return;
       if (!isEllipsisActive(element)) return;
       const style = getClosestProperties(element);
       if (!style) return;
@@ -235,7 +236,7 @@
       tryCreateOverflowTooltip(currentTarget)}
   >
     <!-- child span used to ensure `mouseEventToCaretIndex` works correctly when the name is overflowing -->
-    <span style:width="fit-content"> {name} </span>
+    <span> {name} </span>
   </span>
 {/if}
 

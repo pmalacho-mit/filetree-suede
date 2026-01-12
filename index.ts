@@ -1,6 +1,7 @@
 import FileComponent from "./File.svelte";
 import FolderComponent from "./Folder.svelte";
 import RootComponent from "./Root.svelte";
+import RootDefaultStyle from "./DefaultStyle.svelte";
 import {
   Root as RootModel,
   File as FileModel,
@@ -31,7 +32,8 @@ export namespace Folder {
 
 export const Root = {
   Model: RootModel,
-  Component: RootComponent,
+  Raw: RootComponent,
+  DefaultStyle: RootDefaultStyle,
 };
 
 export namespace Root {

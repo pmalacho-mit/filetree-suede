@@ -1,20 +1,11 @@
 <script lang="ts" module>
   import type { File } from "./";
-  import { type Vars, cssvar } from "./Root.svelte";
   export { symlinkIcon, fileIcon };
 
   const indexBeforeExtension = ({ name }: Pick<File.Model, "name">) => {
     const lastDot = name.lastIndexOf(".");
     return lastDot === -1 ? name.length : lastDot;
   };
-
-  export type Supported =
-    | "--focus-background-color"
-    | "--icon-stroke-width"
-    | "--icon-size"
-    | "--focus-background-color";
-
-  const _var = cssvar<Supported>();
 </script>
 
 <script lang="ts">
@@ -22,8 +13,13 @@
   import Row from "./utils/Row.svelte";
   import { EditableName, rename } from "./name";
   import { renderer } from "../snippet-renderer-suede";
+  import type { WithClassify } from "./Root.svelte";
 
-  let { model }: { model: File.Model } & Vars<Supported> = $props();
+  let {
+    model,
+    depth = 0,
+    classify,
+  }: { model: File.Model; depth?: number } & WithClassify = $props();
 
   let nameView = $state<EditableName>();
   let focused = $state(false);
@@ -39,7 +35,7 @@
   );
 </script>
 
-<Row {model} bind:nameView bind:focused>
+<Row {model} {depth} {classify} bind:nameView bind:focused>
   {#snippet icon()}
     {#if model.icon.current !== undefined}
       {@render renderer(model.icon)}
@@ -55,12 +51,10 @@
   <svg
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
-    fill="currentColor"
+    fill="var(--color, currentColor)"
+    stroke-width="var(--stroke-width, 1.4)"
     stroke-linecap="round"
     stroke-linejoin="round"
-    stroke-width={_var("icon-stroke-width")}
-    style:width={_var("icon-size")}
-    style:height={_var("icon-size")}
   >
     <g>
       <path
@@ -76,12 +70,10 @@
     xmlns="http://www.w3.org/2000/svg"
     viewBox="0 0 24 24"
     fill="none"
-    stroke="currentColor"
+    stroke="var(--color, currentColor)"
+    stroke-width="var(--stroke-width, 1.4)"
     stroke-linecap="round"
     stroke-linejoin="round"
-    stroke-width={_var("icon-stroke-width")}
-    style:width={_var("icon-size")}
-    style:height={_var("icon-size")}
   >
     <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
     <path d="M14 2v4a2 2 0 0 0 2 2h4" />
@@ -90,10 +82,3 @@
     <path d="M16 17H8" />
   </svg>
 {/snippet}
-
-<style>
-  svg {
-    will-change: transform, opacity;
-    backface-visibility: hidden;
-  }
-</style>

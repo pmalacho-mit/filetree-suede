@@ -1,9 +1,4 @@
 <script lang="ts" module>
-  import { cssvar, type Vars } from "../Root.svelte";
-
-  type Supported = "--icon-size";
-
-  const _var = cssvar<Supported>();
 </script>
 
 <script lang="ts">
@@ -17,7 +12,7 @@
     target?: HTMLElement;
     atCursor?: boolean;
     beforeAction?: () => void;
-  } & Vars<Supported>;
+  };
 
   let { model, target, atCursor, beforeAction, highlight }: Props = $props();
 
@@ -38,7 +33,7 @@
     const items = casted.getContextMenuItems?.(casted);
     if (!items) return undefined;
     return {
-      style: `--icon-size: ${_var("icon-size")};`,
+      style: `--icon-size: inherit;`,
       items: items.map((item) => ({
         ...item,
         onclick: onMenuClick(item.onclick),
@@ -71,8 +66,6 @@
     viewBox="0 0 24 24"
     stroke-width={strokeWidth}
     stroke="currentColor"
-    style:width={_var("icon-size")}
-    style:height={_var("icon-size")}
   >
     <path
       stroke-linecap="round"

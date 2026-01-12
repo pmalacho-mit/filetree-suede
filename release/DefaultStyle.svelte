@@ -72,7 +72,12 @@
 
   div :global(.row-name:hover),
   div :global(.row-name.row-name-overflow-hover) {
-    background-color: var(--row-hover-background-color, lightgrey);
+    background-color: lightgrey;
+  }
+
+  div :global(.row-children:hover) + :global(.row-name),
+  div :global(.row-children.row-name-overflow-hover) + :global(.row-name) {
+    /* background-color: blue !important; */
   }
 
   div :global(.row-icon) {

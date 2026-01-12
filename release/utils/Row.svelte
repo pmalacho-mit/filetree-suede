@@ -4,6 +4,7 @@
   import { type Snippet } from "svelte";
   import { EditableName } from "../name";
   import { type WithClassify, type Classify, classified } from "../Root.svelte";
+  import type { MouseEventHandler } from "svelte/elements";
 
   type Props = {
     model: File.Model | Folder.Model;
@@ -26,11 +27,39 @@
       track: "row-inner-track",
       depth: <T extends number>(n: T) => `row-depth-${n}` as const,
     });
+
+  class Elements {
+    container = $state<HTMLElement>();
+    name = $state<HTMLElement>();
+    children = $state<HTMLElement>();
+    overflow = $state<HTMLElement>();
+  }
+
+  const tryCreateOverflowTooltip = (
+    { children, name }: Pick<Elements, "children" | "name">,
+    nameView: EditableName
+  ) => {
+    let instance: ReturnType<EditableName["tryShowNameOverflow"]>;
+    const destroy: MouseEventHandler<HTMLButtonElement> = (event) => {
+      if (event.relatedTarget !== instance?.component.element())
+        instance?.destroy();
+    };
+    name!.addEventListener("mouseleave", destroy as any, {
+      once: true,
+    });
+    instance = nameView.tryShowNameOverflow(
+      () => {
+        children?.classList.add(Classes()["overflow-hover"]);
+      },
+      () => {
+        children?.classList.remove(Classes()["overflow-hover"]);
+      }
+    );
+  };
 </script>
 
 <script lang="ts">
   import type { Events } from "../models.svelte";
-  import type { MouseEventHandler } from "svelte/elements";
 
   let {
     model,
@@ -43,6 +72,8 @@
   }: Props = $props();
 
   const classes = $derived(Classes(classify));
+
+  const elements = new Elements();
   let container = $state<HTMLElement>();
 
   $effect(() =>
@@ -54,7 +85,7 @@
 
 <ContextMenu
   {model}
-  target={container}
+  target={elements.container}
   highlight={(condition) => nameView?.highlight(condition)}
   beforeAction={() => nameView?.edit(false, model.name)}
 />
@@ -68,6 +99,7 @@
 >
   {#if children}
     <div
+      bind:this={elements.children}
       class={`${classes.children} ${classes.depth(depth)}`}
       style:position="relative"
       style:height="fit-content"
@@ -83,27 +115,17 @@
     </div>
   {/if}
   <button
+    bind:this={elements.name}
     class={focused ? `${classes.focused} ${classes.name}` : classes.name}
     onclick={() => (model as Events.WithItemEvents).fire("clicked", model)}
     style:order="1"
+    style:position="relative"
     style:width="100%"
     style:margin="0"
+    style:padding="0"
     style:border="none"
     style:font-size="inherit"
-    style:padding={`0 0 0 ${depth * 0.5}rem`}
-    onmouseenter={({ currentTarget: target }) => {
-      let instance: ReturnType<EditableName["tryShowNameOverflow"]>;
-      const destroy: MouseEventHandler<HTMLButtonElement> = (event) => {
-        if (event.relatedTarget !== instance?.component.element())
-          instance?.destroy();
-      };
-      target.addEventListener("mouseleave", destroy as any, {
-        once: true,
-      });
-      instance = nameView?.tryShowNameOverflow(() =>
-        target.removeEventListener("mouseleave", destroy as any)
-      );
-    }}
+    onmouseenter={() => tryCreateOverflowTooltip(elements, nameView!)}
   >
     <span
       class={classes.indentation}
@@ -113,6 +135,7 @@
       style:background-color="transparent"
       style:flex-direction="row"
       style:align-items="center"
+      style:margin={`0 0 0 ${depth * 0.5}rem`}
     >
       <span
         class={`${classes.icon} row-icon`}
@@ -123,8 +146,14 @@
       >
         {@render icon()}
       </span>
-      <EditableName {model} {classify} bind:this={nameView} />
+      <EditableName
+        bind:this={nameView}
+        {model}
+        {classify}
+        overflowCreationTarget={elements.overflow}
+      />
     </span>
+    <div bind:this={elements.overflow} style:position="absolute"></div>
   </button>
 </div>
 

@@ -70,7 +70,11 @@
 
   export const tryCreateOverflowTooltipFactory =
     (classify: Classify) =>
-    (element: HTMLSpanElement, onMouseEnter?: () => void) => {
+    (
+      element: HTMLSpanElement,
+      onMouseEnter?: () => void,
+      onMouseLeave?: () => void
+    ) => {
       if (!isEllipsisActive(element)) return;
       const style = getClosestProperties(element);
       if (!style) return;
@@ -106,6 +110,7 @@
             rowName.classList.add(hover);
           },
           onmouseleave: () => {
+            onMouseLeave?.();
             rowName.classList.remove(hover);
             instance.destroy();
           },
@@ -116,7 +121,10 @@
       return instance;
     };
 
-  export type Props = { model: File.Model | Folder.Model } & WithClassify;
+  export type Props = {
+    model: File.Model | Folder.Model;
+    overflowCreationTarget?: HTMLElement;
+  } & WithClassify;
 </script>
 
 <script lang="ts">
@@ -124,19 +132,24 @@
     fixToTopLeftCorner,
     isEllipsisActive,
     mouseEventToCaretIndex,
+    setCreationContainer,
   } from "../utils";
   import type { File, Folder } from "..";
   import type { Events } from "../models.svelte";
   import { tick } from "svelte";
   import { classified, type Classify, type WithClassify } from "../Root.svelte";
 
-  let { model, classify }: Props = $props();
+  let { model, classify, overflowCreationTarget }: Props = $props();
 
   const name = $derived(model.name);
   const classes = $derived(Classes(classify));
   const tryCreateOverflowTooltip = $derived(
     tryCreateOverflowTooltipFactory(classify)
   );
+
+  $effect(() => {
+    if (overflowCreationTarget) setCreationContainer(overflowCreationTarget);
+  });
 
   let editing = $state(false);
   let input = $state<HTMLInputElement>();
@@ -170,9 +183,12 @@
     highlighted = setting;
   };
 
-  export const tryShowNameOverflow = (onMouseEnter: () => void) => {
+  export const tryShowNameOverflow = (
+    onMouseEnter: () => void,
+    onMouseLeave: () => void
+  ) => {
     if (!snapshot) return;
-    return tryCreateOverflowTooltip(snapshot, onMouseEnter);
+    return tryCreateOverflowTooltip(snapshot, onMouseEnter, onMouseLeave);
   };
 
   $effect(() => {

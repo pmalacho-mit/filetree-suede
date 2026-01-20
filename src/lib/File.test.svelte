@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Sweater } from "./sweater-vest-suede";
-  import { File, Folder, Root } from "../../release";
+  import { Root } from "../../release";
 
   class Pocket {
     root = new Root.Model();
@@ -10,11 +10,15 @@
 
 <Sweater
   body={async ({ set }) => {
-    const root = Root.Model.From(
+    const root = Root.Model.Initialize(
+      {
+        root: (Ctor) => new Ctor({ readonly: false }),
+      },
       "example.txt",
       [
         "Documents",
         [
+          "a.txt",
           "notes.md",
           ["Photos", ["image.png"]],
           [
@@ -35,9 +39,13 @@
 
     set({ root });
     root.subscribe({
+      "child add finalized": (entry) => {
+        console.log("Added:", entry.name);
+        if (entry.is("file")) entry.fire("request focus toggle");
+      },
       "child clicked": (child) => {
         if (child.is("folder")) child.fire("request expansion toggle", "local");
-        else if (child.is("file") || child.is("symlink")) {
+        else if (child.is("file")) {
           child.fire("request focus toggle");
         }
       },
@@ -46,11 +54,13 @@
 >
   {#snippet vest({ root }: { root: Root.Model })}
     <div style="display: flex; flex-direction: row; align-items: flex-start;">
-      <div style="width: 100px; margin: 8px; border: 1px solid black;">
+      <div
+        style="width: 100px; height: 200px; margin: 8px; border: 1px solid black;"
+      >
         <Root.DefaultStyle
           model={root}
+          --color="grey"
           --background-color="white"
-          --text-color="black"
           --font-size={"1rem"}
         />
       </div>

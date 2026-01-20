@@ -2,29 +2,89 @@ import { type IWithEvents, WithEvents } from "../with-events-suede";
 import { mixin } from "../mixin-suede";
 import { renderable } from "../snippet-renderer-suede";
 import { type Find, byName, byPath } from "./utils/find";
-import type { Snippet } from "svelte";
-import { fileIcon, symlinkIcon } from "./File.svelte";
-import { folderOpen, folderClosed } from "./Folder.svelte";
+import { flushSync, tick, type Snippet } from "svelte";
+import { addFile, fileIcon, symlinkIcon } from "./File.svelte";
+import { folderOpen, folderClosed, trigger, addFolder } from "./Folder.svelte";
 import type { Items } from "./context";
+import type { Choose, Join, Expand } from "./utils";
+import { rename } from "./Root.svelte";
 
-export type FileType = "file" | "symlink";
-export type Type = FileType | "folder" | "root";
+type HighLevel = {
+  /**
+   * A regular file entry
+   */
+  file: "file";
+  /**
+   * A regular folder entry
+   */
+  folder: "folder";
+  /**
+   * The root entry of the file tree
+   */
+  root: "root";
+  /**
+   * A symbolic link to a file or folder entry
+   */
+  symlink: "symlink";
+  /**
+   * A view into a file, folder, or symlink entry
+   * (used for the ancestors of a folder symlink)
+   */
+  view: "view";
+};
 
-export type ItemType = Exclude<Type, "root">;
-type ParentType = Exclude<Type, FileType>;
+/**
+ * TODO: Utilize once symlinks and views are supported
+ */
+type Specifc = Expand<
+  Pick<HighLevel, "root" | "file" | "folder"> & {
+    [k in Join<
+      [HighLevel["file" | "folder"], HighLevel["symlink" | "view"]],
+      " "
+    >]: k;
+  }
+>;
+
+/**
+ * TODO: Support symlinks (which, in the case of symlinked folders, require views)
+ */
+export type Type = Exclude<
+  HighLevel[keyof HighLevel],
+  HighLevel["symlink" | "view"]
+>;
+
+export type ItemType = Exclude<Type, HighLevel["root" | "view"]>;
+export type DisplayableType = Exclude<Type, HighLevel["root"]>;
+export type PrimitiveType = HighLevel["file" | "folder"];
+export type ParentType = HighLevel["folder" | "root"];
+export type ReferentialType = HighLevel["symlink" | "view"];
+
+export type Models = {
+  file: File;
+  folder: Folder;
+  root: Root;
+};
+
+export type SomeModel<T extends keyof Models = "file" | "folder"> = Models[T];
 
 export namespace Events {
   export type Item = {
-    clicked: [Entry];
+    clicked: [SomeModel];
     "request rename": [config: { cursor?: number; force?: string } | undefined];
     "request focus toggle": [];
-    renamed: [Entry];
-    reparented: [Entry];
+    renamed: [SomeModel, from: string, to: string];
+    reparented: [SomeModel];
   };
 
   export type Parent = {
-    "child clicked": [entry: Entry, index: number];
-    "child renamed": [entry: Entry, index: number];
+    "child add finalized": [entry: SomeModel];
+    "child clicked": [entry: SomeModel, index: number];
+    "child renamed": [
+      entry: SomeModel,
+      from: string,
+      to: string,
+      index: number
+    ];
     "request open": [depth: "recursive" | "local"];
     "request close": [depth: "recursive" | "local"];
     "request expansion toggle": [depth: "recursive" | "local"];
@@ -33,74 +93,74 @@ export namespace Events {
   export type WithItemEvents = IWithEvents<Item>;
 }
 
-export type Entry<T extends Type = ItemType> = {
-  type: T;
-} & (T extends "root"
-  ? Parent &
-      IWithEvents<Events.Parent> & {
-        /** Root-specific properties */
-        name?: undefined;
-        path?: undefined;
-      }
-  : {
-      name: string;
-      path: string;
-      parent: Entry<ParentType>;
-      readonly: boolean;
-      remove(): void;
-      getContextMenuItems?: (self: Entry<T>) => Items;
-      is<Target extends Entry<T>, T extends Type = Target["type"]>(
-        query: T
-      ): this is Target;
-    } & (T extends "folder"
-      ? Parent &
-          IWithEvents<Events.Parent & Events.Item> & {
-            /** Folder-specific properties */
-            icon: {
-              closed: renderable.Returns<"single", "optional">;
-              open: renderable.Returns<"single", "optional">;
-            };
-          }
-      : IWithEvents<Events.Item> & {
-          /** File-like-specific properties */
-          icon: renderable.Returns<"single", "optional">;
-        }));
+const is = Object.assign(
+  <T extends Type>(
+    entry: Pick<SomeModel<Type>, "type">,
+    query: T
+  ): entry is Models[T] => entry.type === (query as T),
+  {
+    primitive: (
+      entry: Pick<SomeModel, "type">
+    ): entry is Models[PrimitiveType] =>
+      entry.type === "file" || entry.type === "folder",
+  }
+);
 
-const is = <T extends Type>(
-  entry: Pick<Entry, "type">,
-  query: T
-): this is Entry<T> => entry.type === query;
+namespace Factories {
+  export type MakeItem<T extends ItemType> = (
+    type: T,
+    parent: Models[ParentType]
+  ) => Models[T];
 
-type Parent = {
-  children: Entry[];
-  isNameUnique: (name: string) => boolean;
-  getUniqueName: (candidate: string) => string;
-  walk: (fn: (node: Parent["children"][number]) => void) => void;
-  find: <T extends Find.Query>(query: T) => Find.Result<T>;
-  sort(): void;
-  propagate(parent: IWithEvents<Events.Parent>): () => void;
-  add<const T extends Entry<ItemType> | Entry<ItemType>[]>(
-    item: T,
-    index?: number
-  ): T;
-};
+  export type FolderLikeIcon = (
+    type: HighLevel["folder" | "symlink"],
+    state: "open" | "closed"
+  ) => Snippet<[]>;
 
-type WithoutEvents<T> = Omit<T, keyof IWithEvents<any>>;
+  export type FileLikeIcon = (
+    type: HighLevel["file" | "symlink"]
+  ) => Snippet<[]>;
 
-type ParentConstructorArgs = Partial<
-  Pick<ParentBase, "validNameContent" | "getNameVariant">
->;
+  export type NameForType = (type: PrimitiveType) => string;
 
-namespace Defaults {
-  type Parent = Pick<ParentConstructorArgs, "getNameVariant">;
-  type Item = Pick<
-    ItemConstructor.Args<ItemType>,
-    "defaultNameForType" | "defaultFileIcon" | "defaultFolderIcon"
-  >;
-  export type All = Required<Parent & Item>;
+  export type GetContextMenuItems<T extends Models[keyof Models]> = (
+    self: T
+  ) => Items | undefined;
+
+  export type GetNameVariant = (current: string, attempt: number) => string;
+
+  export type ValidNameContent = (candidate: string) => true | string;
+
+  export type Sort = (a: SomeModel, b: SomeModel) => number;
+
+  export type All = {
+    make: MakeItem<ItemType>;
+    getNameVariant: GetNameVariant;
+    getContextMenuItems: GetContextMenuItems<Models[keyof Models]>;
+    defaultNameForType: NameForType;
+    defaultFileIcon: FileLikeIcon;
+    defaultFolderIcon: FolderLikeIcon;
+    defaultSort: Sort;
+  };
 }
 
-const defaults: Defaults.All = {
+const make = (<T extends ItemType>(type: T, parent: Models[ParentType]) =>
+  (
+    (is(parent, "root") ? parent.make : parent.make ?? parent.root.make) ??
+    defaults.make
+  )(type, parent) as Models[T]) satisfies Factories.MakeItem<ItemType>;
+
+export const getContextMenuItems = <T extends SomeModel>(model: T) =>
+  (
+    (model.getContextMenuItems as Factories.GetContextMenuItems<T>) ??
+    model.parent.defaultContextMenuItems ??
+    model.root.defaultContextMenuItems ??
+    defaults.getContextMenuItems
+  )(model);
+
+const defaults: Factories.All = {
+  make: (type, parent) =>
+    type === "file" ? new File({ parent }) : new Folder({ parent }),
   getNameVariant: (current: string, attempt: number) => {
     const dot = current.lastIndexOf(".");
     const id = `(${attempt + 1})`;
@@ -108,8 +168,8 @@ const defaults: Defaults.All = {
       ? current + id
       : current.slice(0, dot) + id + current.slice(dot);
   },
-  defaultNameForType: (type: ItemType) => type,
-  defaultFileIcon: (type: "file" | "symlink") => {
+  defaultNameForType: (type) => type,
+  defaultFileIcon: (type) => {
     switch (type) {
       case "file":
         return fileIcon;
@@ -117,33 +177,82 @@ const defaults: Defaults.All = {
         return symlinkIcon;
     }
   },
-  defaultFolderIcon: (state: "open" | "closed") => {
-    switch (state) {
-      case "open":
-        return folderOpen;
-      case "closed":
-        return folderClosed;
+  defaultFolderIcon: (type, state) =>
+    type === "folder"
+      ? state === "open"
+        ? folderOpen
+        : folderClosed
+      : state === "open"
+      ? folderOpen
+      : folderClosed,
+  getContextMenuItems: (model) => {
+    if (model.type === "root") {
+      return model.readonly ? [] : [];
+    } else if (model.type === "folder") {
+      return model.readonly
+        ? []
+        : [
+            {
+              content: rename,
+              onclick: () =>
+                model.fire("request rename", {
+                  cursor: model.name.lastIndexOf("."),
+                }),
+            },
+            {
+              content: addFile,
+              onclick: () => model.add("file"),
+            },
+            {
+              content: addFolder,
+              onclick: () => model.add("folder"),
+            },
+          ];
+    } else if (model.type === "file") {
+      return model.readonly
+        ? []
+        : [
+            {
+              content: rename,
+              onclick: () =>
+                model.fire("request rename", {
+                  cursor: model.name.lastIndexOf("."),
+                }),
+            },
+          ];
     }
   },
+  defaultSort: (a, b) => a.name.localeCompare(b.name),
 };
 
-const attach = {
-  type: <T extends Type>(type: T, target: any): target is { type: T } =>
-    Boolean((target.type = type as T)),
-};
+class RawParent {
+  children = $state(new Array<SomeModel>());
 
-class ParentBase implements WithoutEvents<Parent> {
-  children = $state(new Array<Entry>());
+  validNameContent?: Factories.ValidNameContent;
+  getNameVariant?: Factories.GetNameVariant;
+  defaultNameForType?: Factories.NameForType;
+  make?: Factories.MakeItem<ItemType>;
+  defaultContextMenuItems?: Factories.GetContextMenuItems<Models[keyof Models]>;
+  defaultSort?: Factories.Sort;
 
-  readonly validNameContent?: (candidate: string) => true | string;
-  readonly getNameVariant?: (current: string, attempt: number) => string;
-
-  constructor({
-    validNameContent,
-    getNameVariant,
-  }: ParentConstructorArgs = {}) {
-    this.validNameContent = validNameContent;
-    this.getNameVariant = getNameVariant;
+  constructor(
+    args?: Choose<
+      RawParent,
+      {
+        optional:
+          | "validNameContent"
+          | "getNameVariant"
+          | "defaultNameForType"
+          | "make"
+          | "defaultContextMenuItems";
+      }
+    >
+  ) {
+    this.make = args?.make;
+    this.validNameContent = args?.validNameContent;
+    this.getNameVariant = args?.getNameVariant;
+    this.defaultNameForType = args?.defaultNameForType;
+    this.defaultContextMenuItems = args?.defaultContextMenuItems;
   }
 
   isNameUnique(name: string) {
@@ -163,7 +272,7 @@ class ParentBase implements WithoutEvents<Parent> {
     }
   }
 
-  walk(fn: (node: Entry) => void) {
+  walk(fn: (node: Models[ItemType]) => void) {
     for (const child of this.children) {
       fn(child);
       if (child.is("folder")) child.walk(fn);
@@ -187,15 +296,18 @@ class ParentBase implements WithoutEvents<Parent> {
       this.children as any as WithEvents<Events.Item & Events.Parent>[]
     ).subscribe({
       clicked: (child, _, index) => parent.fire("child clicked", child, index),
-      renamed: (child, _, index) => parent.fire("child renamed", child, index),
+      renamed: (child, from, to, _, index) =>
+        parent.fire("child renamed", child, from, to, index),
       "child clicked": (child, index) =>
         parent.fire("child clicked", child, index),
-      "child renamed": (child, index) =>
-        parent.fire("child renamed", child, index),
+      "child renamed": (child, from, to, index) =>
+        parent.fire("child renamed", child, from, to, index),
+      "child add finalized": (entry) =>
+        parent.fire("child add finalized", entry),
     });
   }
 
-  add<const T extends Entry<ItemType> | Entry<ItemType>[]>(
+  insert<const T extends Models[ItemType] | Models[ItemType][]>(
     item: T,
     index?: number
   ): T {
@@ -211,138 +323,194 @@ class ParentBase implements WithoutEvents<Parent> {
   }
 }
 
-namespace ItemConstructor {
-  type RequiredFromEntry<T extends ItemType> = Required<
-    Pick<Entry<T>, "type" | "parent">
-  >;
+class Icon {
+  /**
+   * Base class for supporting an icon for file-like entries
+   * (entries with only a single state, as managed by this library)
+   */
+  static readonly FileLike = class FileLikeIcon {
+    readonly icon: renderable.Returns<"single", "optional">;
 
-  type PartialFromEntry<T extends ItemType> = Partial<
-    Pick<Entry<T>, "name" | "parent" | "readonly" | "getContextMenuItems">
-  >;
+    constructor(
+      args: { type: HighLevel["file" | "symlink"] } & Partial<
+        renderable.Initial<FileLikeIcon["icon"]> & {
+          defaultFileIcon?: Factories.FileLikeIcon;
+        }
+      >
+    ) {
+      this.icon = renderable("single");
+      if (args.renderables)
+        renderable.init(
+          this.icon,
+          args as renderable.Initial<FileLikeIcon["icon"]>
+        );
+      else {
+        const getIcon = args.defaultFileIcon ?? defaults.defaultFileIcon;
+        this.icon.set((render) => render(getIcon(args.type)));
+      }
+    }
+  };
 
-  type Factories = Partial<{
-    defaultNameForType: (type: ItemType) => string;
-    defaultFileIcon(type: FileType): string | Snippet<[]>;
-    defaultFolderIcon(state: "open" | "closed"): string | Snippet<[]>;
-  }>;
+  /**
+   * Base class for supporting an icon for folder-like entries
+   * (entries with open and closed states)
+   */
+  static readonly FolderLike = class FolderLikeIcon {
+    readonly icon: {
+      closed: renderable.Returns<"single", "optional">;
+      open: renderable.Returns<"single", "optional">;
+    };
 
-  type Renderables<T extends ItemType> = Partial<
-    Exclude<
-      T extends "folder"
-        ? renderable.Initial<Entry<"folder">["icon"]>
-        : renderable.Initial<Pick<Entry<Exclude<ItemType, "folder">>, "icon">>,
-      undefined
-    >
-  >;
-
-  export type Args<T extends ItemType> = RequiredFromEntry<T> &
-    PartialFromEntry<T> &
-    Factories &
-    Renderables<T>;
+    constructor(
+      args: { type: HighLevel["folder" | "symlink"] } & Partial<
+        renderable.Initial<FolderLikeIcon["icon"]> & {
+          defaultFolderIcon: Factories.FolderLikeIcon;
+        }
+      >
+    ) {
+      this.icon = { open: renderable("single"), closed: renderable("single") };
+      if (args.renderables)
+        renderable.init(
+          this.icon,
+          args as renderable.Initial<FolderLikeIcon["icon"]>
+        );
+      else {
+        const getIcon = args.defaultFolderIcon ?? defaults.defaultFolderIcon;
+        this.icon.open.set((render) => render(getIcon(args.type, "open")));
+        this.icon.closed.set((render) => render(getIcon(args.type, "closed")));
+      }
+    }
+  };
 }
 
-class ItemBase<T extends ItemType> implements WithoutEvents<Entry> {
+/**
+ * Base class for file and folder entries
+ */
+class Item<T extends ItemType> {
   name: string;
-  parent: Entry<ParentType>;
-  readonly icon: Entry<T>["icon"];
+  parent: Models[ParentType];
+  readonly: boolean;
+
   readonly type: T;
   readonly path: string;
-  readonly readonly: boolean;
-  readonly getContextMenuItems?: Entry<T>["getContextMenuItems"];
+  readonly onNameChange?: (from: string, to: string) => void;
+
+  /**
+   * Get context menu items specific to this item
+   */
+  readonly getContextMenuItems?: Factories.GetContextMenuItems<Models[T]>;
+
+  get root(): Root {
+    let current: Models[ParentType] = this.parent;
+    while (!is(current, "root")) current = current.parent;
+    return current as Root;
+  }
+
+  get defaultName() {
+    return (
+      (this.parent ?? this.root).defaultNameForType ??
+      defaults.defaultNameForType
+    )(this.type);
+  }
 
   constructor({
     type,
     name,
     parent,
     readonly,
-    renderables,
-    defaultFileIcon,
-    defaultFolderIcon,
-    defaultNameForType,
+    onNameChange,
     getContextMenuItems,
-  }: ItemConstructor.Args<T>) {
-    this.type = type;
-    this.readonly = readonly ?? false;
-    this.getContextMenuItems = getContextMenuItems;
-    this.parent = $state(parent);
-    this.name = $state(
-      name ??
-        this.parent.getUniqueName(
-          defaultNameForType?.(type) ?? defaults.defaultNameForType(type)
-        )
-    );
-    this.path = $derived(`${this.parent.path ?? ""}/${this.name}`);
-
-    if (this.is("folder")) {
-      this.icon = { open: renderable("single"), closed: renderable("single") };
-      if (renderables)
-        renderable.init(this.icon, { renderables } as renderable.Initial<
-          Entry<"folder">["icon"]
-        >);
-      else {
-        const getIcon = defaultFolderIcon ?? defaults.defaultFolderIcon;
-        this.icon.open.set((r) => r(getIcon("open") as Snippet<[]>));
-        this.icon.closed.set((r) => r(getIcon("closed") as Snippet<[]>));
-      }
-    } else {
-      this.icon = renderable("single");
-      if (renderables) {
-        type FileRenderables = Pick<Entry<FileType>, "icon">;
-        renderable.init(
-          this as FileRenderables,
-          { renderables } as renderable.Initial<FileRenderables>
-        );
-      } else {
-        const getIcon = defaultFileIcon ?? defaults.defaultFileIcon;
-        this.icon.set((r) => r(getIcon(type as FileType) as Snippet<[]>));
-      }
+  }: Choose<
+    Item<T>,
+    {
+      required: "type" | "parent";
+      optional: "readonly" | "name" | "onNameChange" | "getContextMenuItems";
     }
+  > &
+    (T extends PrimitiveType ? { name?: string } : { name: string }) & {
+      defaultNameForType?: Factories.NameForType;
+    }) {
+    this.type = type;
+    this.readonly = $state(readonly ?? false);
+    this.parent = $state(parent);
+    this.name = $state(name ?? this.defaultName);
+    this.path = $derived(`${this.parent.path ?? ""}/${this.name}`);
+    this.onNameChange = onNameChange;
+    this.getContextMenuItems = getContextMenuItems;
   }
 
-  is<Target extends Entry<T>, T extends Type = Target["type"]>(
-    query: T
-  ): this is Target {
+  is<Type extends keyof Models>(query: Type): this is Models[Type] {
     return is(this, query);
-  }
-
-  remove(): void {
-    const { children } = this.parent;
-    const self = this as any as Entry;
-    children.splice(children.indexOf(self), 1);
-  }
-
-  interface() {
-    return this as any as Entry<T>;
   }
 }
 
 namespace Serialized {
-  type File = string;
-  type Folder = [name: string, children: Entry[]];
-  export type Entry = File | Folder;
+  type _File = string;
+  type _Folder = [name: string, children: Entry[]];
+
+  type Construct<T extends abstract new (...args: any) => any> = (
+    Constructor: T,
+    name: string,
+    parent: Models[ParentType]
+  ) => InstanceType<T>;
+
+  export type Factory = Partial<{
+    file: Construct<typeof File>;
+    folder: Construct<typeof Folder>;
+    root: (Constructor: typeof Root) => Root;
+  }>;
+  export type Entry = _File | _Folder;
 }
 
-export class Root
-  extends mixin([ParentBase, WithEvents<Events.Parent>])
-  implements Entry<"root">
-{
+export class Root extends mixin([RawParent, WithEvents<Events.Parent>]) {
+  readonly: boolean;
+  path?: undefined;
+  name?: undefined;
   readonly type = "root";
 
-  constructor(args?: ParentConstructorArgs) {
+  constructor(
+    args?: ConstructorParameters<typeof RawParent>[0] & {
+      readonly?: boolean;
+    }
+  ) {
     super([args]);
+    this.readonly = $state(args?.readonly ?? false);
   }
 
-  static From(...entries: Serialized.Entry[]): Root {
-    const root = new Root();
+  create<T extends ItemType>(type: T, parent: Models[ParentType]) {
+    return (this.make ?? defaults.make)(type, parent);
+  }
 
-    const build = (node: Serialized.Entry, parent: Entry<ParentType>) => {
+  static Initialize(
+    facotory: Serialized.Factory,
+    ...entries: Serialized.Entry[]
+  ): Root;
+  static Initialize(...entries: Serialized.Entry[]): Root;
+  static Initialize(
+    factoryOrEntry: Serialized.Factory | Serialized.Entry,
+    ...entries: Serialized.Entry[]
+  ): Root {
+    let factory: Serialized.Factory;
+
+    if (typeof factoryOrEntry === "string" || Array.isArray(factoryOrEntry)) {
+      factory = {};
+      entries.unshift(factoryOrEntry);
+    } else factory = factoryOrEntry;
+
+    factory.file ??= (Ctor, name, parent) => new Ctor({ name, parent });
+    factory.folder ??= (Ctor, name, parent) => new Ctor({ name, parent });
+    factory.root ??= (Ctor) => new Ctor();
+
+    const root = factory.root(Root);
+
+    const build = (node: Serialized.Entry, parent: Models[ParentType]) => {
       if (typeof node === "string") {
-        const file = new File({ name: node, parent });
-        parent.add(file);
+        const file = factory.file!(File, node, parent);
+        parent.insert(file);
       } else {
         const [name, children] = node;
-        const folder = new Folder({ name, parent });
-        parent.add(folder);
+        const folder = factory.folder!(Folder, name, parent);
+        parent.insert(folder);
         for (const child of children) build(child, folder);
       }
     };
@@ -352,35 +520,69 @@ export class Root
   }
 }
 
-export class File
-  extends mixin([ItemBase<"file">, WithEvents<Events.Item>])
-  implements Entry<"file">
-{
-  constructor(args: Omit<ItemConstructor.Args<"file">, "type">) {
-    if (attach.type("file", args)) super([args]);
-  }
+function argify<T extends Type, Args>(
+  type: T,
+  target: Args
+): [Args & { type: T }];
+function argify<T extends Type, Args>(
+  type: T,
+  target: Args,
+  name: string
+): [Args & { type: T; name: string }];
+function argify<T extends Type, Args>(type: T, target: Args, name?: string) {
+  const casted = target as Args & { type: T };
+  casted.type = type;
+  return [casted];
 }
 
-export class Symlink
-  extends mixin([ItemBase<"symlink">, WithEvents<Events.Item>])
-  implements Entry<"symlink">
-{
-  constructor(args: Omit<ItemConstructor.Args<"symlink">, "type">) {
-    if (attach.type("symlink", args)) super([args]);
-  }
-}
+type ModelArgs<T extends typeof File | typeof Folder> =
+  ConstructorParameters<T>[0];
 
-export class Folder
-  extends mixin([
-    ItemBase<"folder">,
-    ParentBase,
-    WithEvents<Events.Item & Events.Parent>,
-  ])
-  implements Entry<"folder">
-{
+export class File extends mixin([
+  Item<"file">,
+  Icon.FileLike,
+  WithEvents<Events.Item>,
+]) {
   constructor(
-    args: Omit<ItemConstructor.Args<"folder">, "type"> & ParentConstructorArgs
+    args: Omit<ConstructorParameters<typeof Item>[0], "type"> &
+      Omit<ConstructorParameters<(typeof Icon)["FileLike"]>[0], "type">
   ) {
-    if (attach.type("folder", args)) super([args], [args]);
+    const tuple = File.Argify(args);
+    super(tuple, tuple);
+  }
+
+  static Argify(args: ModelArgs<typeof File>) {
+    const casted = args as ModelArgs<typeof File> & { type: "file" };
+    casted.type = "file";
+    return [casted] as [typeof casted];
+  }
+}
+
+export class Folder extends mixin([
+  Item<"folder">,
+  RawParent,
+  Icon.FolderLike,
+  WithEvents<Events.Item & Events.Parent>,
+]) {
+  constructor(
+    args: Omit<ConstructorParameters<typeof Item>[0], "type"> &
+      Exclude<ConstructorParameters<typeof RawParent>[0], undefined> &
+      Omit<ConstructorParameters<(typeof Icon)["FolderLike"]>[0], "type">
+  ) {
+    const tuple = argify("folder", args);
+    super(tuple, tuple, tuple);
+  }
+
+  async add(type: ItemType) {
+    const child = make(type, this);
+    this.insert(child);
+    this.fire("request open", "local");
+    await tick();
+    const events = child as Events.WithItemEvents;
+    events.once({
+      renamed: () => this.fire("child add finalized", child),
+    });
+    events.fire("request rename", { force: "" });
+    return child;
   }
 }

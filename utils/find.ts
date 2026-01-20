@@ -1,19 +1,19 @@
-import type { Entry } from "../models.svelte";
+import type { SomeModel } from "../models.svelte";
 
 export namespace Find {
   export type Query = { path: string } | { name: string };
   export type Result<T extends Query> = T extends { path: string }
-    ? Entry | undefined
-    : Entry[];
+    ? SomeModel | undefined
+    : SomeModel[];
   export type SearchPriority = "depth" | "pseudo breadth";
 }
 
 export const byPath = (
   path: string,
-  collection: Entry[],
+  collection: SomeModel[],
   priority: Find.SearchPriority = "pseudo breadth"
-): Entry | undefined => {
-  let folders: Entry<"folder">[] | undefined = undefined;
+): SomeModel | undefined => {
+  let folders: SomeModel<"folder">[] | undefined = undefined;
   for (const node of collection) {
     if (node.path === path) return node;
     if (priority === "depth" && node.is("folder")) {
@@ -35,9 +35,9 @@ export const byPath = (
 
 export const byName = (
   name: string,
-  collection: Entry[],
-  accumulator?: Entry[]
-): Entry[] => {
+  collection: SomeModel[],
+  accumulator?: SomeModel[]
+): SomeModel[] => {
   accumulator ??= [];
   for (const node of collection) {
     if (node.name === name) accumulator.push(node);

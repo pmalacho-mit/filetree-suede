@@ -1,3 +1,5 @@
 {
-  "dependencies": {}
+  "dependencies": {
+    "overlayscrollbars-svelte": "^0.5.5"
+  }
 }

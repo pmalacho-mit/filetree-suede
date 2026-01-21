@@ -8,7 +8,7 @@
   }
 
   class WithID extends File.Model {
-    id = Math.random().toString(36).substring(2, 9);
+    id = Math.random().toString(36).substring(2, 10);
   }
 </script>
 
@@ -38,10 +38,10 @@
         ],
       ],
       "todo.txt",
-      ["Music", ["song.mp3"]]
+      ["Music", ["song.mp3"]],
+      ["Music", ["song.mp3"]],
+      ["Music", ["song.mp3", ["Album", ["track1.mp3", "track2.mp3"]]]]
     );
-
-    //root.add(new WithID({ name: "custom_id_file.txt", parent: root }));
 
     set({ root });
     root.subscribe({
@@ -72,7 +72,9 @@
       </div>
       <div
         style="width: 100px; margin: 8px; height: 100px; background-color: blue;"
-      ></div>
+      >
+        <button onclick={() => root.add(new WithID({ parent: root }))}></button>
+      </div>
     </div>
   {/snippet}
 </Sweater>

@@ -17,8 +17,17 @@
   export { renameIcon, rename };
 
   class HeightBinder {
-    total = $state(0);
+    deferredHeight = $state(0);
+    liveHeight = $state(0);
+
     heights = new Array<number>();
+    minimums = new Array<number>();
+    deferred = new Array<boolean>();
+
+    defer(index: number, value: boolean) {
+      this.deferred[index] = value;
+      if (!value) this.deferredHeight = this.liveHeight;
+    }
 
     at(index: number) {
       const self = this;
@@ -27,9 +36,13 @@
           return self.heights[index] ?? 0;
         },
         set value(value: number) {
+          self.minimums[index] ??= value;
+          if (value < self.minimums[index]) self.minimums[index] = value;
+
           const current = self.heights[index] ?? 0;
-          self.total += value - current;
+          self.liveHeight += value - current;
           self.heights[index] = value;
+          if (!self.deferred[index]) self.deferredHeight = self.liveHeight;
         },
       };
     }
@@ -37,8 +50,18 @@
     trim(length: number) {
       while (this.heights.length > length) {
         const current = this.heights.pop() ?? 0;
-        this.total -= current;
+        this.liveHeight -= current;
+        this.deferredHeight = this.liveHeight;
       }
+      this.deferred.length = this.heights.length;
+      this.minimums.length = this.heights.length;
+    }
+
+    totalWithMinimum(index: number) {
+      let total = 0;
+      for (let i = 0; i < this.heights.length; i++)
+        total += i === index ? (this.minimums[i] ?? 0) : (this.heights[i] ?? 0);
+      return total;
     }
   }
 
@@ -51,19 +74,23 @@
     return deltaY;
   };
 
-  type ScrollInstance = ReturnType<ReturnType<typeof useOverlayScrollbars>[1]>;
-  const scrollOffset = (instance: ScrollInstance) =>
-    instance?.elements().scrollOffsetElement;
-  const scrollTop = (instance: ScrollInstance) =>
-    scrollOffset(instance)?.scrollTop ?? 0;
+  const scroller = (
+    instance: ReturnType<ReturnType<typeof useOverlayScrollbars>[1]>
+  ) => {
+    const element = instance?.elements().scrollOffsetElement;
+    const top = element?.scrollTop ?? 0;
+    const by = (top: number) => element?.scrollBy({ top });
+    return { element, top, by };
+  };
 </script>
 
 <script lang="ts">
   import { slide } from "svelte/transition";
   import { type Root, Folder, File } from "./";
   import { px } from "./utils";
-  import { onMount } from "svelte";
   import { useOverlayScrollbars } from "overlayscrollbars-svelte";
+  import { WithEvents } from "../with-events-suede";
+  import type { Events } from "./models.svelte";
 
   let { model, classify }: Props = $props();
 
@@ -80,18 +107,38 @@
 
   let transform = $state(0);
   let containerHeight = $state(0);
+  let hideScroll = $state(false);
 
-  const scrollActive = $derived(binder.total > containerHeight);
+  const scrollActive = $derived(binder.deferredHeight > containerHeight);
 
   const [initialize, instance] = useOverlayScrollbars(() => ({
     events: {
-      scroll: (instance) => (transform = scrollTop(instance)),
+      scroll: (instance) => (transform = scroller(instance).top),
     },
   }));
 
-  onMount(() => {
-    initialize(scroll!);
+  $effect(() => {
+    if (scroll) initialize(scroll);
   });
+
+  $effect(() =>
+    WithEvents.Collect(model.children as WithEvents<Events.Parent>[]).subscribe(
+      {
+        opening: (_, __, index) => {
+          binder.defer(index, false);
+          hideScroll = false;
+        },
+        closing: (_, __, index) => {
+          hideScroll = binder.totalWithMinimum(index) < containerHeight;
+          binder.defer(index, hideScroll);
+        },
+        closed: (_, __, index) => {
+          binder.defer(index, false);
+          hideScroll = false;
+        },
+      }
+    )
+  );
 </script>
 
 <div
@@ -119,9 +166,7 @@
       event.preventDefault();
     }}
     onwheel={(event) =>
-      scrollOffset(instance())?.scrollBy({
-        top: normalizeWheelDeltaY(event, containerHeight),
-      })}
+      scroller(instance()).by(normalizeWheelDeltaY(event, containerHeight))}
   >
     {#each model.children as child, index}
       {@const height = binder.at(index)}
@@ -146,13 +191,13 @@
     style:overflow-y="auto"
     style:overflow-x="visible"
     style:height="100%"
-    style:width={scrollActive ? "8px" : "6px"}
+    style:width="8px"
     style:transition="opacity 200ms ease-in-out"
-    style:opacity={scrollActive ? "1" : "0"}
+    style:opacity={hideScroll || !scrollActive ? "0" : "1"}
     style:z-index="0"
     style:direction="rtl"
   >
-    <div style:height={px(binder.total)}></div>
+    <div style:height={px(binder.deferredHeight)}></div>
   </div>
 </div>
 

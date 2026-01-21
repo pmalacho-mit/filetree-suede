@@ -33,11 +33,9 @@ export const mouseEventToCaretIndex = <
   Target extends HTMLElement
 >(
   { currentTarget, offsetX }: T,
-  { length }: string,
-  useChild = true
+  { length }: string
 ) => {
-  const element = useChild ? currentTarget.children[0] : currentTarget;
-  const { width } = element.getBoundingClientRect();
+  const { width } = currentTarget.getBoundingClientRect();
 
   if (length === 0) return { caretIndex: 0, approxCharacterWidth: 0 };
 
@@ -138,3 +136,28 @@ export const easeInOut = {
 };
 
 export const px = (value: number) => `${value}px` as const;
+
+export type Choose<
+  T,
+  Config extends {
+    required?: keyof T;
+    optional?: keyof T;
+  }
+> = (Config["required"] extends keyof T
+  ? { [K in Config["required"]]: T[K] }
+  : {}) &
+  (Config["optional"] extends keyof T
+    ? { [K in Config["optional"]]?: T[K] }
+    : {});
+
+export type Join<
+  T extends readonly string[],
+  Delimeter extends string
+> = T extends readonly [
+  infer First extends string,
+  ...infer Rest extends string[]
+]
+  ? Rest extends []
+    ? First
+    : `${First}${Delimeter}${Join<Rest, Delimeter>}`
+  : "";

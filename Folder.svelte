@@ -120,6 +120,10 @@
 
       const { style } = childContainer;
 
+      untrack(() =>
+        expanded ? model.fire("opening", model) : model.fire("closing", model)
+      );
+
       style.transition = "none";
       style.maxHeight = from;
       style.overflow = "hidden";
@@ -137,6 +141,7 @@
       const unset = () => {
         if (version === animationVersion) {
           if (expanding) style.maxHeight = "none";
+          expanding ? model.fire("opened", model) : model.fire("closed", model);
           style.overflow = "visible";
         }
         childContainer!.removeEventListener("transitionend", unset);

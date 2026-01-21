@@ -77,6 +77,10 @@ export namespace Events {
   };
 
   export type Parent = {
+    opening: [entry: SomeModel<ParentType>];
+    opened: [entry: SomeModel<ParentType>];
+    closing: [entry: SomeModel<ParentType>];
+    closed: [entry: SomeModel<ParentType>];
     "child add finalized": [entry: SomeModel];
     "child clicked": [entry: SomeModel, index: number];
     "child renamed": [
@@ -90,6 +94,7 @@ export namespace Events {
     "request expansion toggle": [depth: "recursive" | "local"];
   };
 
+  export type WithParentEvents = IWithEvents<Parent>;
   export type WithItemEvents = IWithEvents<Item>;
 }
 
@@ -182,10 +187,18 @@ const defaults: Factories.All = {
     candidate.trim() === "" ? { error: "Name can't be empty" } : true,
   getNameVariant: (current: string, attempt: number) => {
     const dot = current.lastIndexOf(".");
-    const id = `(${attempt + 1})`;
-    return dot === -1
-      ? current + id
-      : current.slice(0, dot) + id + current.slice(dot);
+    let base = current;
+    let ext = "";
+
+    if (dot >= 0) {
+      base = current.slice(0, dot);
+      ext = current.slice(dot);
+    }
+
+    const match = base.match(/^(.+)\((\d+)\)$/);
+    if (match) base = match[1];
+
+    return `${base}(${attempt + 1})${ext}`;
   },
   defaultNameForType: (type) => type,
   defaultFileIcon: (type) => {
@@ -472,7 +485,7 @@ class Item<T extends ItemType> {
     this.type = type;
     this.readonly = $state(readonly ?? false);
     this.parent = $state(parent);
-    this.name = $state(name ?? this.defaultName);
+    this.name = $state(name ?? this.parent.getUniqueName(this.defaultName));
     this.path = $derived(`${this.parent.path ?? ""}/${this.name}`);
     this.onNameChange = onNameChange;
     this.getContextMenuItems = getContextMenuItems;

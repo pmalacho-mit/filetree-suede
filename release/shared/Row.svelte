@@ -8,6 +8,7 @@
     type WithClassify,
   } from "../utils/classes";
   import type { Items } from "../context";
+  import { Classes as RootClasses } from "../Root.svelte";
 
   type Props = {
     model: File.Model | Folder.Model;
@@ -47,12 +48,13 @@
 
   class ContextMenu {
     items = $state<Items>();
-    top = 0;
+
+    anchor: { top: number } | { bottom: number } = { top: 0 };
     left = 0;
     minWidth = 0;
 
-    show(args: Record<"top" | "left" | "minWidth", number> & { items: Items }) {
-      this.top = args.top;
+    show(args: Pick<ContextMenu, "items" | "anchor" | "left" | "minWidth">) {
+      this.anchor = args.anchor;
       this.left = args.left;
       this.minWidth = args.minWidth;
       this.items = args.items;
@@ -84,7 +86,7 @@
     name = $bindable(),
     indent = defaultIndent,
     classify,
-    transitionTimeMsPerContextItem = 50,
+    transitionTimeMsPerContextItem = 75,
   }: Props = $props();
 
   $effect(() => {
@@ -110,10 +112,19 @@
     const entry = elements.entry!.getBoundingClientRect();
     const indented = elements.indented!.getBoundingClientRect();
     name?.highlight(true);
+    const root = elements
+      .entry!.closest(`.${RootClasses(classify).container}`)!
+      .getBoundingClientRect();
+    const entryMidPointY = entry.y + entry.height / 2 - root.y;
+    const showAbove = entryMidPointY > root.height / 2;
+    const anchor = showAbove
+      ? { bottom: indented.height }
+      : { top: indented.height };
+
     context.show({
       items,
+      anchor,
       left: indented.left - entry.left,
-      top: indented.height,
       minWidth: indented.right - indented.left,
     });
   };
@@ -251,13 +262,15 @@
     (context.items?.length ?? 0) * transitionTimeMsPerContextItem}
   <div
     bind:this={elements.context}
+    style={"top" in context.anchor
+      ? `top: ${px(context.anchor.top)}`
+      : `bottom: ${px(context.anchor.bottom)}`}
     class={classes.contextContainer}
     style:position="absolute"
     style:left={px(context.left)}
-    style:top={px(context.top)}
     style:min-width={px(context.minWidth)}
     style:will-change="max-height"
-    style:overflow="hidden"
+    style:overflow-y="scroll"
     style:max-height="0"
     style:z-index="1000"
     style:padding="0"

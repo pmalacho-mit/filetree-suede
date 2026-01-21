@@ -1,10 +1,14 @@
 <script lang="ts">
   import { Sweater } from "./sweater-vest-suede";
-  import { Root } from "../../release";
+  import { Root, File } from "../../release";
 
   class Pocket {
     root = new Root.Model();
     fontSize = 14;
+  }
+
+  class WithID extends File.Model {
+    id = Math.random().toString(36).substring(2, 9);
   }
 </script>
 
@@ -36,6 +40,8 @@
       "todo.txt",
       ["Music", ["song.mp3"]]
     );
+
+    //root.add(new WithID({ name: "custom_id_file.txt", parent: root }));
 
     set({ root });
     root.subscribe({

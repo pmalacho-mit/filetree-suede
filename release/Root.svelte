@@ -1,4 +1,6 @@
 <script lang="ts" module>
+  import "overlayscrollbars/overlayscrollbars.css";
+
   import {
     classified,
     type Classify,
@@ -16,28 +18,52 @@
 
   class HeightBinder {
     total = $state(0);
-    map = new WeakMap<File.Model | Folder.Model, number>();
-    for(model: File.Model | Folder.Model) {
+    heights = new Array<number>();
+
+    at(index: number) {
       const self = this;
       return {
         get value() {
-          return self.map.get(model) ?? 0;
+          return self.heights[index] ?? 0;
         },
         set value(value: number) {
-          const current = self.map.get(model) ?? 0;
+          const current = self.heights[index] ?? 0;
           self.total += value - current;
-          self.map.set(model, value);
+          self.heights[index] = value;
         },
       };
     }
+
+    trim(length: number) {
+      while (this.heights.length > length) {
+        const current = this.heights.pop() ?? 0;
+        this.total -= current;
+      }
+    }
   }
+
+  const normalizeWheelDeltaY = (
+    { deltaY, deltaMode }: WheelEvent,
+    clientHeight: number
+  ) => {
+    if (deltaMode === 1) deltaY *= 16;
+    else if (deltaMode === 2) deltaY *= clientHeight;
+    return deltaY;
+  };
+
+  type ScrollInstance = ReturnType<ReturnType<typeof useOverlayScrollbars>[1]>;
+  const scrollOffset = (instance: ScrollInstance) =>
+    instance?.elements().scrollOffsetElement;
+  const scrollTop = (instance: ScrollInstance) =>
+    scrollOffset(instance)?.scrollTop ?? 0;
 </script>
 
 <script lang="ts">
   import { slide } from "svelte/transition";
   import { type Root, Folder, File } from "./";
   import { px } from "./utils";
-  import { onDestroy, tick, untrack } from "svelte";
+  import { onMount } from "svelte";
+  import { useOverlayScrollbars } from "overlayscrollbars-svelte";
 
   let { model, classify }: Props = $props();
 
@@ -46,101 +72,32 @@
   $effect(() => model.sort());
   $effect(() => model.propagate(model));
 
+  const binder = new HeightBinder();
+  $effect(() => binder.trim(model.children.length));
+
   let container = $state<HTMLElement>();
   let scroll = $state<HTMLElement>();
 
-  const binder = new HeightBinder();
-  let containerHeight = $state(0);
-  let scrollChildWidth = $state(0);
-  let widthCandidate = $state(0);
-
-  let scrollSetting = false;
-
-  const expandUntilVisible = async () => {
-    let max = 1000;
-    let iteration = 0;
-    while (scrollChildWidth === 0) {
-      widthCandidate++;
-      await new Promise(requestAnimationFrame);
-      if (iteration++ >= max) break;
-    }
-  };
-
-  $effect(() => {
-    const scrollActive = binder.total > containerHeight;
-    if (scrollSetting === scrollActive) return;
-    if (scrollActive) {
-      untrack(expandUntilVisible);
-      scrollSetting = true;
-    } else {
-      widthCandidate = 0;
-      scrollSetting = false;
-    }
-  });
-
   let transform = $state(0);
+  let containerHeight = $state(0);
 
-  const clamp = (scroll: number) =>
-    Math.max(0, Math.min(scroll, Math.max(0, binder.total - containerHeight)));
+  const scrollActive = $derived(binder.total > containerHeight);
 
-  const normalizeWheelDeltaY = ({ deltaY, deltaMode }: WheelEvent) => {
-    switch (deltaMode) {
-      case 1: // lines
-        deltaY *= 16;
-        break;
-      case 2: // pages
-        deltaY *= containerHeight;
-        break;
-    }
-    return deltaY;
-  };
+  const [initialize, instance] = useOverlayScrollbars(() => ({
+    events: {
+      scroll: (instance) => (transform = scrollTop(instance)),
+    },
+  }));
 
-  let raf = 0;
-  const startSmoothScroll = (target: number) => {
-    if (raf) return;
-
-    const step = () => {
-      raf = 0;
-      if (!scroll) return;
-
-      const current = scroll.scrollTop;
-      const diff = target - current;
-
-      // stop when very close
-      if (Math.abs(diff) < 0.5) {
-        scroll.scrollTop = target;
-        return;
-      }
-
-      // ease: move a fraction each frame (tweak 0.18–0.35)
-      scroll.scrollTop = current + diff * 0.22;
-
-      raf = requestAnimationFrame(step);
-    };
-
-    raf = requestAnimationFrame(step);
-  };
-
-  onDestroy(() => {
-    if (raf) cancelAnimationFrame(raf);
+  onMount(() => {
+    initialize(scroll!);
   });
-
-  let scheduled = false;
-
-  const scheduleNativeSmoothScroll = (targetTop: number) => {
-    if (scheduled) return;
-    scheduled = true;
-    requestAnimationFrame(() => {
-      scheduled = false;
-      scroll?.scrollTo({ top: targetTop, behavior: "smooth" });
-    });
-  };
 </script>
 
 <div
+  style:position="relative"
   style:height="100%"
   style:width="100%"
-  style:position="relative"
   style:overflow-y="clip"
 >
   <button
@@ -161,14 +118,13 @@
     oncontextmenu={(event) => {
       event.preventDefault();
     }}
-    onwheel={(event) => {
-      const deltaY = normalizeWheelDeltaY(event);
-      if (!scroll) return;
-      scheduleNativeSmoothScroll(clamp(scroll!.scrollTop + deltaY));
-    }}
+    onwheel={(event) =>
+      scrollOffset(instance())?.scrollBy({
+        top: normalizeWheelDeltaY(event, containerHeight),
+      })}
   >
-    {#each model.children as child}
-      {@const height = binder.for(child)}
+    {#each model.children as child, index}
+      {@const height = binder.at(index)}
       <div
         transition:slide={{ duration: 300 }}
         bind:clientHeight={height.value}
@@ -181,30 +137,24 @@
       </div>
     {/each}
   </button>
+
   <div
     bind:this={scroll}
     style:top="0"
-    style:left={scrollChildWidth > 0 ? px(-widthCandidate / 2) : "0px"}
+    style:left="-4px"
     style:position="absolute"
     style:overflow-y="auto"
-    style:width={binder.total > containerHeight ? px(widthCandidate) : "0px"}
+    style:overflow-x="visible"
     style:height="100%"
-    style:transition="opacity 100ms ease-in-out"
-    style:opacity={scrollChildWidth > 0 ? "1" : "0"}
+    style:width={scrollActive ? "8px" : "6px"}
+    style:transition="opacity 200ms ease-in-out"
+    style:opacity={scrollActive ? "1" : "0"}
     style:z-index="0"
     style:direction="rtl"
-    onscroll={(event) => (transform = event.currentTarget.scrollTop)}
   >
-    <div
-      style:height={px(binder.total)}
-      bind:clientWidth={scrollChildWidth}
-    ></div>
+    <div style:height={px(binder.total)}></div>
   </div>
 </div>
-
-{binder.total}
-
-{scrollChildWidth}
 
 {#snippet renameIcon()}
   <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">

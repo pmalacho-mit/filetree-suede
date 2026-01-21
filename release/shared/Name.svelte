@@ -20,6 +20,7 @@
     type Classify,
     type WithClassify,
   } from "../utils/classes";
+  import { validNameContent } from "../models.svelte";
 
   let { model, classify }: Props = $props();
 
@@ -50,7 +51,9 @@
     else {
       highlight(false);
       const from = model.name;
-      const to = detail as string;
+      let to = detail as string;
+      const result = validNameContent(model, to);
+      if (result !== true) to = from;
       model.name = to;
       (model as File.Model).fire("renamed", model, from, to);
       model.onNameChange?.(from, to);

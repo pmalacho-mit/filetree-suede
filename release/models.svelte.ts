@@ -129,12 +129,15 @@ namespace Factories {
 
   export type GetNameVariant = (current: string, attempt: number) => string;
 
-  export type ValidNameContent = (candidate: string) => true | string;
+  export type ValidNameContent = (
+    candidate: string
+  ) => true | { error?: string; suggestion?: string };
 
   export type Sort = (a: SomeModel, b: SomeModel) => number;
 
   export type All = {
     make: MakeItem<ItemType>;
+    validNameContent: ValidNameContent;
     getNameVariant: GetNameVariant;
     getContextMenuItems: GetContextMenuItems<Models[keyof Models]>;
     defaultNameForType: NameForType;
@@ -150,6 +153,20 @@ const make = (<T extends ItemType>(type: T, parent: Models[ParentType]) =>
     defaults.make
   )(type, parent) as Models[T]) satisfies Factories.MakeItem<ItemType>;
 
+export const validNameContent = (
+  model: SomeModel,
+  candidate: string
+): ReturnType<Factories.ValidNameContent> =>
+  (
+    model.parent.validNameContent ??
+    model.root.validNameContent ??
+    ((candidate) => {
+      const unique = model.parent.isNameUnique(candidate);
+      if (!unique) return { error: "Name must be unique" };
+      return defaults.validNameContent(candidate);
+    })
+  )?.(candidate);
+
 export const getContextMenuItems = <T extends SomeModel>(model: T) =>
   (
     (model.getContextMenuItems as Factories.GetContextMenuItems<T>) ??
@@ -161,6 +178,8 @@ export const getContextMenuItems = <T extends SomeModel>(model: T) =>
 const defaults: Factories.All = {
   make: (type, parent) =>
     type === "file" ? new File({ parent }) : new Folder({ parent }),
+  validNameContent: (candidate) =>
+    candidate.trim() === "" ? { error: "Name can't be empty" } : true,
   getNameVariant: (current: string, attempt: number) => {
     const dot = current.lastIndexOf(".");
     const id = `(${attempt + 1})`;
@@ -263,7 +282,8 @@ class RawParent {
     let counter = 0;
     while (true) {
       const result = this.validNameContent?.(candidate);
-      if (typeof result === "string") candidate = result;
+      if (typeof result === "object" && result.suggestion)
+        candidate = result.suggestion;
       if (this.isNameUnique(candidate)) return candidate;
       candidate =
         this.getNameVariant?.(candidate, counter) ??
@@ -320,6 +340,25 @@ class RawParent {
         ? this.children.splice(index, 0, ...item)
         : this.children.splice(index, 0, item);
     return item;
+  }
+
+  async addNew(
+    typeOrItem: ItemType | Folder | File,
+    parent: Models[ParentType]
+  ) {
+    const child =
+      typeof typeOrItem === "string" ? make(typeOrItem, parent) : typeOrItem;
+    child.parent = parent;
+    const parentEvents = parent as IWithEvents<Events.Parent>;
+    this.insert(child);
+    parentEvents.fire("request open", "local");
+    await tick();
+    const childEvents = child as Events.WithItemEvents;
+    childEvents.once({
+      renamed: () => parentEvents.fire("child add finalized", child),
+    });
+    childEvents.fire("request rename", { force: "" });
+    return child;
   }
 }
 
@@ -518,6 +557,12 @@ export class Root extends mixin([RawParent, WithEvents<Events.Parent>]) {
     for (const entry of entries) build(entry, root);
     return root;
   }
+
+  async add<T extends File | Folder>(item: Folder | File): Promise<T>;
+  async add<T extends ItemType>(type: T): Promise<Models[T]>;
+  async add(typeOrItem: ItemType | Folder | File) {
+    this.addNew(typeOrItem, this);
+  }
 }
 
 function argify<T extends Type, Args>(
@@ -573,16 +618,9 @@ export class Folder extends mixin([
     super(tuple, tuple, tuple);
   }
 
-  async add(type: ItemType) {
-    const child = make(type, this);
-    this.insert(child);
-    this.fire("request open", "local");
-    await tick();
-    const events = child as Events.WithItemEvents;
-    events.once({
-      renamed: () => this.fire("child add finalized", child),
-    });
-    events.fire("request rename", { force: "" });
-    return child;
+  async add<T extends File | Folder>(item: Folder | File): Promise<T>;
+  async add<T extends ItemType>(type: T): Promise<Models[T]>;
+  async add(typeOrItem: ItemType | Folder | File) {
+    this.addNew(typeOrItem, this);
   }
 }

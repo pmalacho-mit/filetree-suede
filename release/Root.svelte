@@ -6,6 +6,7 @@
     type Classify,
     type WithClassify,
   } from "./utils/classes";
+  import { easeInOut } from "./utils";
 
   export const Classes = (classify?: Classify) =>
     classified(classify, {
@@ -65,6 +66,66 @@
     }
   }
 
+  class MomentumScrollManager {
+    private animationId: number | null = null;
+    private velocity = 0; // Current scroll velocity (px/frame)
+    private position = 0; // Current scroll position
+    private lastFrameTime = 0;
+
+    // Physics constants - tuned for natural feeling
+    private damping = 0.92; // Friction coefficient (0.9-0.95 feels natural)
+    private velocityMultiplier = 0.3; // How much wheel input affects velocity
+    private minVelocity = 0.1; // Stop animation when velocity drops below this
+
+    scrollBy(
+      delta: number,
+      scrollerFn: () => { by: (top: number) => void }
+    ) {
+      // Immediately add to velocity - no delay, instant response
+      this.velocity += delta * this.velocityMultiplier;
+
+      // Start animation loop if not already running
+      if (this.animationId === null) {
+        this.lastFrameTime = performance.now();
+        this.animate(scrollerFn);
+      }
+    }
+
+    private animate(scrollerFn: () => { by: (top: number) => void }) {
+      const frame = (now: number) => {
+        const deltaTime = now - this.lastFrameTime;
+        this.lastFrameTime = now;
+
+        // Apply velocity to scroll position
+        const scrollDelta = this.velocity;
+        scrollerFn().by(scrollDelta);
+        this.position += scrollDelta;
+
+        // Apply damping (friction) - exponential decay
+        this.velocity *= this.damping;
+
+        // Continue animation if velocity is still significant
+        if (Math.abs(this.velocity) > this.minVelocity) {
+          this.animationId = requestAnimationFrame(frame);
+        } else {
+          // Stop animation when velocity becomes negligible
+          this.velocity = 0;
+          this.animationId = null;
+        }
+      };
+
+      this.animationId = requestAnimationFrame(frame);
+    }
+
+    cancel() {
+      if (this.animationId !== null) {
+        cancelAnimationFrame(this.animationId);
+        this.animationId = null;
+        this.velocity = 0;
+      }
+    }
+  }
+
   const normalizeWheelDeltaY = (
     { deltaY, deltaMode }: WheelEvent,
     clientHeight: number
@@ -101,6 +162,8 @@
 
   const binder = new HeightBinder();
   $effect(() => binder.trim(model.children.length));
+
+  const smoothScroll = new MomentumScrollManager();
 
   let container = $state<HTMLElement>();
   let scroll = $state<HTMLElement>();
@@ -139,6 +202,10 @@
       }
     )
   );
+
+  $effect(() => {
+    return () => smoothScroll.cancel();
+  });
 </script>
 
 <div
@@ -165,8 +232,10 @@
     oncontextmenu={(event) => {
       event.preventDefault();
     }}
-    onwheel={(event) =>
-      scroller(instance()).by(normalizeWheelDeltaY(event, containerHeight))}
+    onwheel={(event) => {
+      const delta = normalizeWheelDeltaY(event, containerHeight);
+      smoothScroll.scrollBy(delta, () => scroller(instance()));
+    }}
   >
     {#each model.children as child, index}
       {@const height = binder.at(index)}

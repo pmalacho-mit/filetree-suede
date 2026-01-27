@@ -73,14 +73,11 @@
     private lastFrameTime = 0;
 
     // Physics constants - tuned for natural feeling
-    private damping = 0.92; // Friction coefficient (0.9-0.95 feels natural)
-    private velocityMultiplier = 0.3; // How much wheel input affects velocity
+    private damping = 0.9; // Friction coefficient (0.9-0.95 feels natural)
+    private velocityMultiplier = 0.2; // How much wheel input affects velocity
     private minVelocity = 0.1; // Stop animation when velocity drops below this
 
-    scrollBy(
-      delta: number,
-      scrollerFn: () => { by: (top: number) => void }
-    ) {
+    scrollBy(delta: number, scrollerFn: () => { by: (top: number) => void }) {
       // Immediately add to velocity - no delay, instant response
       this.velocity += delta * this.velocityMultiplier;
 
@@ -128,7 +125,7 @@
 
   const normalizeWheelDeltaY = (
     { deltaY, deltaMode }: WheelEvent,
-    clientHeight: number
+    clientHeight: number,
   ) => {
     if (deltaMode === 1) deltaY *= 16;
     else if (deltaMode === 2) deltaY *= clientHeight;
@@ -136,7 +133,7 @@
   };
 
   const scroller = (
-    instance: ReturnType<ReturnType<typeof useOverlayScrollbars>[1]>
+    instance: ReturnType<ReturnType<typeof useOverlayScrollbars>[1]>,
   ) => {
     const element = instance?.elements().scrollOffsetElement;
     const top = element?.scrollTop ?? 0;
@@ -152,6 +149,7 @@
   import { useOverlayScrollbars } from "overlayscrollbars-svelte";
   import { WithEvents } from "../with-events-suede";
   import type { Events } from "./models.svelte";
+  import { untrack } from "svelte";
 
   let { model, classify }: Props = $props();
 
@@ -199,9 +197,39 @@
           binder.defer(index, false);
           hideScroll = false;
         },
-      }
-    )
+      },
+    ),
   );
+
+  const scrollVisible = $derived(!hideScroll && scrollActive);
+
+  const animateTransformTo = (target: number = 0) => {
+    const initial = transform;
+    const delta = target - initial;
+    const duration = 300;
+    let elapsed = 0;
+
+    const step = (timestamp: number) => {
+      if (!elapsed) elapsed = timestamp;
+      const progress = timestamp - elapsed;
+      const eased = easeInOut.t(Math.min(progress / duration, 1));
+      transform = initial + delta * eased;
+      if (progress < duration) {
+        requestAnimationFrame(step);
+      } else {
+        transform = target;
+      }
+    };
+
+    requestAnimationFrame(step);
+  };
+
+  $effect(() => {
+    if (!scrollVisible) {
+      smoothScroll.cancel();
+      untrack(() => animateTransformTo());
+    }
+  });
 
   $effect(() => {
     return () => smoothScroll.cancel();
@@ -262,7 +290,7 @@
     style:height="100%"
     style:width="8px"
     style:transition="opacity 200ms ease-in-out"
-    style:opacity={hideScroll || !scrollActive ? "0" : "1"}
+    style:opacity={scrollVisible ? "1" : "0"}
     style:z-index="0"
     style:direction="rtl"
   >

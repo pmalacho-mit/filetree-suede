@@ -40,7 +40,7 @@
       "todo.txt",
       ["Music", ["song.mp3"]],
       ["Music", ["song.mp3"]],
-      ["Music", ["song.mp3", ["Album", ["track1.mp3", "track2.mp3"]]]]
+      ["Music", ["song.mp3", ["Album", ["track1.mp3", "track2.mp3"]]]],
     );
 
     set({ root });

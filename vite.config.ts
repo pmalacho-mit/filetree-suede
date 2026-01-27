@@ -7,7 +7,7 @@ export default defineConfig({
       allow: [
         "./release",
         "./with-events-suede",
-        "./snippet-renderer-suede",
+        "./svelte-snippet-renderer-suede",
         "./mixin-suede",
       ],
     },

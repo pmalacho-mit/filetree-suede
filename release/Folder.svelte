@@ -9,7 +9,7 @@
   export const trigger = (
     expanded: boolean,
     folder: Folder.Model,
-    depth: "local" | "recursive"
+    depth: "local" | "recursive",
   ) => {
     if (folder.parent.type === "folder")
       expandOnMount[expanded ? "add" : "delete"](folder);
@@ -29,7 +29,7 @@
   import Self from "./Folder.svelte";
   import Name from "./shared/Name.svelte";
   import { onDestroy, onMount, tick, untrack } from "svelte";
-  import { renderer } from "../snippet-renderer-suede/SnippetRenderer.svelte";
+  import { renderer } from "../svelte-snippet-renderer-suede/SnippetRenderer.svelte";
   import { easeInOut, px } from "./utils/";
   import type { WithClassify } from "./utils/classes";
 
@@ -65,7 +65,7 @@
       "request close": (depth) => trigger((expanded = false), model, depth),
       "request expansion toggle": (depth) =>
         trigger((expanded = !expanded), model, depth),
-    })
+    }),
   );
 
   let clientHeight = $state(0);
@@ -113,7 +113,7 @@
       const to = px(
         expanded
           ? untrack(() => clientHeight) + childFolderHeights
-          : (childFolderHeights = 0)
+          : (childFolderHeights = 0),
       );
 
       if (from === to) return;
@@ -121,7 +121,7 @@
       const { style } = childContainer;
 
       untrack(() =>
-        expanded ? model.fire("opening", model) : model.fire("closing", model)
+        expanded ? model.fire("opening", model) : model.fire("closing", model),
       );
 
       style.transition = "none";

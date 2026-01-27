@@ -1,6 +1,6 @@
 import { type IWithEvents, WithEvents } from "../with-events-suede";
 import { mixin } from "../mixin-suede";
-import { renderable } from "../snippet-renderer-suede";
+import { renderable } from "../svelte-snippet-renderer-suede";
 import { type Find, byName, byPath } from "./utils/find";
 import { flushSync, tick, type Snippet } from "svelte";
 import { addFile, fileIcon, symlinkIcon } from "./File.svelte";
@@ -87,7 +87,7 @@ export namespace Events {
       entry: SomeModel,
       from: string,
       to: string,
-      index: number
+      index: number,
     ];
     "request open": [depth: "recursive" | "local"];
     "request close": [depth: "recursive" | "local"];
@@ -101,41 +101,41 @@ export namespace Events {
 const is = Object.assign(
   <T extends Type>(
     entry: Pick<SomeModel<Type>, "type">,
-    query: T
+    query: T,
   ): entry is Models[T] => entry.type === (query as T),
   {
     primitive: (
-      entry: Pick<SomeModel, "type">
+      entry: Pick<SomeModel, "type">,
     ): entry is Models[PrimitiveType] =>
       entry.type === "file" || entry.type === "folder",
-  }
+  },
 );
 
 namespace Factories {
   export type MakeItem<T extends ItemType> = (
     type: T,
-    parent: Models[ParentType]
+    parent: Models[ParentType],
   ) => Models[T];
 
   export type FolderLikeIcon = (
     type: HighLevel["folder" | "symlink"],
-    state: "open" | "closed"
+    state: "open" | "closed",
   ) => Snippet<[]>;
 
   export type FileLikeIcon = (
-    type: HighLevel["file" | "symlink"]
+    type: HighLevel["file" | "symlink"],
   ) => Snippet<[]>;
 
   export type NameForType = (type: PrimitiveType) => string;
 
   export type GetContextMenuItems<T extends Models[keyof Models]> = (
-    self: T
+    self: T,
   ) => Items | undefined;
 
   export type GetNameVariant = (current: string, attempt: number) => string;
 
   export type ValidNameContent = (
-    candidate: string
+    candidate: string,
   ) => true | { error?: string; suggestion?: string };
 
   export type Sort = (a: SomeModel, b: SomeModel) => number;
@@ -154,13 +154,13 @@ namespace Factories {
 
 const make = (<T extends ItemType>(type: T, parent: Models[ParentType]) =>
   (
-    (is(parent, "root") ? parent.make : parent.make ?? parent.root.make) ??
+    (is(parent, "root") ? parent.make : (parent.make ?? parent.root.make)) ??
     defaults.make
   )(type, parent) as Models[T]) satisfies Factories.MakeItem<ItemType>;
 
 export const validNameContent = (
   model: SomeModel,
-  candidate: string
+  candidate: string,
 ): ReturnType<Factories.ValidNameContent> =>
   (
     model.parent.validNameContent ??
@@ -215,8 +215,8 @@ const defaults: Factories.All = {
         ? folderOpen
         : folderClosed
       : state === "open"
-      ? folderOpen
-      : folderClosed,
+        ? folderOpen
+        : folderClosed,
   getContextMenuItems: (model) => {
     if (model.type === "root") {
       return model.readonly ? [] : [];
@@ -278,7 +278,7 @@ class RawParent {
           | "make"
           | "defaultContextMenuItems";
       }
-    >
+    >,
   ) {
     this.make = args?.make;
     this.validNameContent = args?.validNameContent;
@@ -326,7 +326,7 @@ class RawParent {
 
   propagate(parent: IWithEvents<Events.Parent>) {
     return WithEvents.Collect(
-      this.children as any as WithEvents<Events.Item & Events.Parent>[]
+      this.children as any as WithEvents<Events.Item & Events.Parent>[],
     ).subscribe({
       clicked: (child, _, index) => parent.fire("child clicked", child, index),
       renamed: (child, from, to, _, index) =>
@@ -342,7 +342,7 @@ class RawParent {
 
   insert<const T extends Models[ItemType] | Models[ItemType][]>(
     item: T,
-    index?: number
+    index?: number,
   ): T {
     if (index === undefined)
       Array.isArray(item)
@@ -357,7 +357,7 @@ class RawParent {
 
   async addNew(
     typeOrItem: ItemType | Folder | File,
-    parent: Models[ParentType]
+    parent: Models[ParentType],
   ) {
     const child =
       typeof typeOrItem === "string" ? make(typeOrItem, parent) : typeOrItem;
@@ -388,13 +388,13 @@ class Icon {
         renderable.Initial<FileLikeIcon["icon"]> & {
           defaultFileIcon?: Factories.FileLikeIcon;
         }
-      >
+      >,
     ) {
       this.icon = renderable("single");
       if (args.renderables)
         renderable.init(
           this.icon,
-          args as renderable.Initial<FileLikeIcon["icon"]>
+          args as renderable.Initial<FileLikeIcon["icon"]>,
         );
       else {
         const getIcon = args.defaultFileIcon ?? defaults.defaultFileIcon;
@@ -418,13 +418,13 @@ class Icon {
         renderable.Initial<FolderLikeIcon["icon"]> & {
           defaultFolderIcon: Factories.FolderLikeIcon;
         }
-      >
+      >,
     ) {
       this.icon = { open: renderable("single"), closed: renderable("single") };
       if (args.renderables)
         renderable.init(
           this.icon,
-          args as renderable.Initial<FolderLikeIcon["icon"]>
+          args as renderable.Initial<FolderLikeIcon["icon"]>,
         );
       else {
         const getIcon = args.defaultFolderIcon ?? defaults.defaultFolderIcon;
@@ -503,7 +503,7 @@ namespace Serialized {
   type Construct<T extends abstract new (...args: any) => any> = (
     Constructor: T,
     name: string,
-    parent: Models[ParentType]
+    parent: Models[ParentType],
   ) => InstanceType<T>;
 
   export type Factory = Partial<{
@@ -523,7 +523,7 @@ export class Root extends mixin([RawParent, WithEvents<Events.Parent>]) {
   constructor(
     args?: ConstructorParameters<typeof RawParent>[0] & {
       readonly?: boolean;
-    }
+    },
   ) {
     super([args]);
     this.readonly = $state(args?.readonly ?? false);
@@ -580,12 +580,12 @@ export class Root extends mixin([RawParent, WithEvents<Events.Parent>]) {
 
 function argify<T extends Type, Args>(
   type: T,
-  target: Args
+  target: Args,
 ): [Args & { type: T }];
 function argify<T extends Type, Args>(
   type: T,
   target: Args,
-  name: string
+  name: string,
 ): [Args & { type: T; name: string }];
 function argify<T extends Type, Args>(type: T, target: Args, name?: string) {
   const casted = target as Args & { type: T };
@@ -603,7 +603,7 @@ export class File extends mixin([
 ]) {
   constructor(
     args: Omit<ConstructorParameters<typeof Item>[0], "type"> &
-      Omit<ConstructorParameters<(typeof Icon)["FileLike"]>[0], "type">
+      Omit<ConstructorParameters<(typeof Icon)["FileLike"]>[0], "type">,
   ) {
     const tuple = File.Argify(args);
     super(tuple, tuple);
@@ -625,7 +625,7 @@ export class Folder extends mixin([
   constructor(
     args: Omit<ConstructorParameters<typeof Item>[0], "type"> &
       Exclude<ConstructorParameters<typeof RawParent>[0], undefined> &
-      Omit<ConstructorParameters<(typeof Icon)["FolderLike"]>[0], "type">
+      Omit<ConstructorParameters<(typeof Icon)["FolderLike"]>[0], "type">,
   ) {
     const tuple = argify("folder", args);
     super(tuple, tuple, tuple);

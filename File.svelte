@@ -11,7 +11,7 @@
 <script lang="ts">
   import Row from "./shared/Row.svelte";
   import Name from "./shared/Name.svelte";
-  import { renderer } from "../snippet-renderer-suede";
+  import { renderer } from "../svelte-snippet-renderer-suede";
   import type { WithClassify } from "./utils/classes";
 
   let {
@@ -30,7 +30,7 @@
         const cursor = config?.cursor ?? indexBeforeExtension(model);
         name!.rename(cursor, config?.force);
       },
-    })
+    }),
   );
 </script>
 

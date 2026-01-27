@@ -6,7 +6,7 @@
 [subrepo]
 remote = https://github.com/pmalacho-mit/svelte-snippet-renderer-suede
 branch = release
-	commit = 4a50ecb2ee327b501aa6ea30b2b600bfeed676ee
-	parent = 0e0aaa30a56bf6bf505ea26cc171f7a38fd63705
+	commit = a4818eb6c61aaa9b26e6ce7904b35ba0e867a018
+	parent = 8b060530344849e987a9e7d6ae94e3dcfdba0544
 	method = merge
 	cmdver = 0.4.9

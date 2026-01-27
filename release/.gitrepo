@@ -6,7 +6,7 @@
 [subrepo]
 	remote = https://github.com/pmalacho-mit/filetree-suede
 	branch = release
-	commit = 0276946a10d7ded8036e3c7aa22e9354a9b93a03
-	parent = d56c466b93033aea380337dcc81cc47b0ab0b7a5
+	commit = ee2306efc07c44b9ef04becb6253549d91f87b6f
+	parent = df687cb41b844ef4ce32e921bd7a57e8b72f7786
 	method = merge
 	cmdver = 0.4.9

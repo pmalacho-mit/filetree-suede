@@ -156,22 +156,32 @@
     {/snippet}
   </Sweater>
 {:else}
-  Run local server: <code>HOST={host} PORT={port} npx y-websocket</code>
+  <div style:height="100%" style:width="100%" style:overflow="hidden">
+    Run local server: <code>HOST={host} PORT={port} npx y-websocket</code>
 
-  <div
-    style:display="flex"
-    style:flex-direction="row"
-    style:align-items="flex-start"
-  >
-    <iframe
-      title="File Test"
-      src={window.location.pathname + "?use-iframe=true"}
-      style="width: 50%; height: 100%; margin: 8px; border: 1px solid black;"
-    ></iframe>
-    <iframe
-      title="File Test"
-      src={window.location.pathname + "?use-iframe=true"}
-      style="width: 50%; height: 100%; margin: 8px; border: 1px solid black;"
-    ></iframe>
+    <div
+      style:display="flex"
+      style:flex-direction="row"
+      style:align-items="flex-start"
+      style:height="100%"
+    >
+      <iframe
+        title="File Test"
+        src={window.location.pathname + "?use-iframe=true"}
+        style="width: 40%; height: 100%; margin: 8px; border: 1px solid black;"
+      ></iframe>
+      <iframe
+        title="File Test"
+        src={window.location.pathname + "?use-iframe=true"}
+        style="width: 40%; height: 100%; margin: 8px; border: 1px solid black;"
+      ></iframe>
+    </div>
   </div>
 {/if}
+
+<style>
+  :global(body) {
+    padding: 0;
+    margin: 0;
+  }
+</style>
